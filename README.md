@@ -2,6 +2,8 @@
 
 A desktop chat client for [Ollama](https://ollama.com) that also talks to OpenAI and Anthropic — one app for local and cloud models, built with Electron, React, and TypeScript.
 
+![Chat view with a local Ollama model](docs/screenshots/chat.png)
+
 ## Features
 
 - **Multi-provider chat** — local Ollama models plus OpenAI and Anthropic, with streaming responses, in one interface.
@@ -15,6 +17,36 @@ A desktop chat client for [Ollama](https://ollama.com) that also talks to OpenAI
 - **Configurable Ollama host** — point at a remote Ollama server instead of localhost.
 - **Data export/import** — back up or move your chat history.
 - **Auto-updates** — packaged builds check GitHub Releases for new versions.
+
+## Screenshots
+
+<details>
+<summary>Server, system info, and model catalog</summary>
+
+![Ollama server settings, system specs, and available models](docs/screenshots/settings-server.png)
+
+</details>
+
+<details>
+<summary>Browsing and pulling models</summary>
+
+![Model catalog with recommendations based on your hardware](docs/screenshots/settings-models.png)
+
+</details>
+
+<details>
+<summary>Chat defaults and prompt library</summary>
+
+![Default model parameters and saved prompt presets](docs/screenshots/settings-chat-defaults.png)
+
+</details>
+
+<details>
+<summary>Data management and diagnostics</summary>
+
+![Export/import/clear conversations and copy diagnostic info](docs/screenshots/settings-diagnostics.png)
+
+</details>
 
 ## Installation
 
