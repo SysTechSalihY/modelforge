@@ -1,4 +1,5 @@
 import { streamSSE } from "./sse";
+import { describeHttpError, describeNetworkError } from "./errors";
 import type { ChatFn } from "./types";
 
 export const chat: ChatFn = async (apiKey, model, messages, options, onToken, signal) => {
@@ -16,29 +17,33 @@ export const chat: ChatFn = async (apiKey, model, messages, options, onToken, si
         };
     });
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model,
-            messages: openaiMessages,
-            stream: true,
-            stream_options: { include_usage: true },
-            temperature: options?.temperature ?? 0.7,
-            top_p: options?.topP,
-            max_tokens: options?.maxTokens,
-            frequency_penalty: options?.frequencyPenalty,
-            presence_penalty: options?.presencePenalty,
-        }),
-        signal,
-    });
+    let res: Response;
+    try {
+        res = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model,
+                messages: openaiMessages,
+                stream: true,
+                stream_options: { include_usage: true },
+                temperature: options?.temperature ?? 0.7,
+                top_p: options?.topP,
+                max_tokens: options?.maxTokens,
+                frequency_penalty: options?.frequencyPenalty,
+                presence_penalty: options?.presencePenalty,
+            }),
+            signal,
+        });
+    } catch (err) {
+        throw describeNetworkError("OpenAI", err);
+    }
 
     if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`OpenAI request failed: ${res.status} ${errText}`);
+        throw new Error(await describeHttpError(res, "OpenAI"));
     }
 
     await streamSSE(res, (payload) => {

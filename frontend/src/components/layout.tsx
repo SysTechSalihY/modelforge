@@ -154,7 +154,13 @@ function ProjectGroup({
                         <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs text-muted-foreground">Name</label>
-                                <Input value={name} onChange={(e) => setName(e.target.value)} onBlur={handleSave} className="h-8 text-xs" />
+                                <Input
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    onBlur={handleSave}
+                                    aria-label="Project name"
+                                    className="h-8 text-xs"
+                                />
                             </div>
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs text-muted-foreground">
@@ -164,6 +170,7 @@ function ProjectGroup({
                                     value={instructions}
                                     onChange={(e) => setInstructions(e.target.value)}
                                     onBlur={handleSave}
+                                    aria-label="Project instructions"
                                     className="min-h-20 text-xs"
                                 />
                             </div>
@@ -190,6 +197,7 @@ function ProjectGroup({
                                     onChange={(e) => setNewPresetName(e.target.value)}
                                     onKeyDown={(e) => e.key === "Enter" && saveCurrentAsPreset()}
                                     placeholder={t.presetName}
+                                    aria-label={t.presetName}
                                     className="h-8 text-xs"
                                 />
                                 <Button
@@ -222,6 +230,7 @@ function ProjectGroup({
                                         step={0.1}
                                         value={params.temperature ?? ""}
                                         onChange={(e) => updateParam({ temperature: Number(e.target.value) })}
+                                        aria-label={t.temperature}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -234,6 +243,7 @@ function ProjectGroup({
                                         step={0.05}
                                         value={params.topP ?? ""}
                                         onChange={(e) => updateParam({ topP: Number(e.target.value) })}
+                                        aria-label={t.topP}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -245,6 +255,7 @@ function ProjectGroup({
                                         step={1}
                                         value={params.maxTokens ?? ""}
                                         onChange={(e) => updateParam({ maxTokens: Number(e.target.value) })}
+                                        aria-label={t.maxTokens}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -256,6 +267,7 @@ function ProjectGroup({
                                         step={512}
                                         value={params.contextLength ?? ""}
                                         onChange={(e) => updateParam({ contextLength: Number(e.target.value) })}
+                                        aria-label={t.contextLength}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -268,6 +280,7 @@ function ProjectGroup({
                                         step={0.1}
                                         value={params.frequencyPenalty ?? ""}
                                         onChange={(e) => updateParam({ frequencyPenalty: Number(e.target.value) })}
+                                        aria-label={t.frequencyPenalty}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -280,6 +293,7 @@ function ProjectGroup({
                                         step={0.1}
                                         value={params.presencePenalty ?? ""}
                                         onChange={(e) => updateParam({ presencePenalty: Number(e.target.value) })}
+                                        aria-label={t.presencePenalty}
                                         className="h-8 text-xs"
                                     />
                                 </div>
@@ -415,6 +429,7 @@ export default function Layout() {
                                 onChange={(e) => setNewProjectName(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
                                 placeholder={t.newProject + "..."}
+                                aria-label={t.newProject}
                                 className="h-7 text-xs"
                             />
                             <Button size="sm" variant="outline" onClick={handleCreateProject}>
@@ -430,6 +445,7 @@ export default function Layout() {
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder={t.searchChats}
+                        aria-label={t.searchChats}
                         className="h-8 pl-7 text-xs"
                     />
                 </div>

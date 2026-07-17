@@ -222,6 +222,18 @@ export interface ElectronApi {
   app: {
     setBusy: (busy: boolean) => Promise<void>;
     getVersion: () => Promise<string>;
+    getDiagnostics: () => Promise<{
+      appVersion: string;
+      electron: string;
+      chrome: string;
+      node: string;
+      platform: string;
+      arch: string;
+      ollamaHost: string;
+      ollamaRunning: boolean;
+      logTail: string;
+    }>;
+    openLogsFolder: () => Promise<void>;
   };
   menu: {
     onNewChat: (callback: () => void) => () => void;

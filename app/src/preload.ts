@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld("api", {
     app: {
         setBusy: (busy: boolean) => ipcRenderer.invoke("app:setBusy", busy),
         getVersion: () => ipcRenderer.invoke("app:getVersion"),
+        getDiagnostics: () => ipcRenderer.invoke("app:getDiagnostics"),
+        openLogsFolder: () => ipcRenderer.invoke("app:openLogsFolder"),
     },
 
     menu: {

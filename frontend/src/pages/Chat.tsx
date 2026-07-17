@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     Send,
@@ -86,6 +86,107 @@ function deriveTitle(text: string) {
     const trimmed = text.trim().replace(/\s+/g, " ");
     return trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed;
 }
+
+interface MessageBubbleProps {
+    message: ChatMessage;
+    index: number;
+    isLastAssistant: boolean;
+    isStreaming: boolean;
+    copied: boolean;
+    provider: ProviderId | undefined;
+    modelId: string | undefined;
+    onCopy: (text: string, index: number) => void;
+    onEdit: (index: number) => void;
+    onRegenerate: () => void;
+}
+
+// Memoized so a token arriving mid-stream (which only replaces the last
+// message in the array) doesn't force every prior message — including its
+// markdown parse/highlight pass — to re-render on every chunk. `message`
+// keeps referential equality for all but the actively-streaming entry, so
+// the default shallow-prop comparison already does the right thing here.
+const MessageBubble = memo(function MessageBubble({
+    message: m,
+    index: i,
+    isLastAssistant,
+    isStreaming,
+    copied,
+    provider,
+    modelId,
+    onCopy,
+    onEdit,
+    onRegenerate,
+}: MessageBubbleProps) {
+    return (
+        <div className={cn("group flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
+            <div
+                className={cn(
+                    "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                    m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                )}
+            >
+                {m.images && m.images.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-1.5">
+                        {m.images.map((img, imgIdx) => (
+                            <img
+                                key={imgIdx}
+                                src={`data:${img.mimeType};base64,${img.data}`}
+                                alt="attachment"
+                                className="h-20 w-20 rounded-lg object-cover"
+                            />
+                        ))}
+                    </div>
+                )}
+                {m.content ? <Markdown content={m.content} /> : isStreaming && isLastAssistant ? "…" : ""}
+            </div>
+            <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                    onClick={() => onCopy(m.content, i)}
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Copy message"
+                >
+                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                </button>
+                {m.role === "user" && !isStreaming && (
+                    <button
+                        onClick={() => onEdit(i)}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Edit message"
+                    >
+                        <Pencil className="size-3.5" />
+                    </button>
+                )}
+                {isLastAssistant && !isStreaming && (
+                    <button
+                        onClick={onRegenerate}
+                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Regenerate response"
+                    >
+                        <RotateCcw className="size-3.5" />
+                    </button>
+                )}
+                {m.role === "assistant" && m.usage && (
+                    <span className="self-center px-1 text-xs text-muted-foreground">
+                        {formatUsage(m.usage, provider, modelId)}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+},
+// Custom comparator: onCopy/onEdit/onRegenerate are plain function
+// declarations on the parent that get a new identity every render, but they
+// only run on click — comparing them would defeat the whole point of
+// memoizing (they'd "change" every render even though the message didn't).
+(prev, next) =>
+    prev.message === next.message &&
+    prev.index === next.index &&
+    prev.isLastAssistant === next.isLastAssistant &&
+    prev.isStreaming === next.isStreaming &&
+    prev.copied === next.copied &&
+    prev.provider === next.provider &&
+    prev.modelId === next.modelId
+);
 
 function formatUsage(usage: UsageInfo, provider: ProviderId | undefined, modelId: string | undefined): string {
     const total = (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0);
@@ -800,73 +901,21 @@ export default function Chat() {
                             <p className="text-sm">{t.startConversationWith(parsedModel?.modelId || "a model")}</p>
                         </div>
                     )}
-                    {messages.map((m, i) => {
-                        const isLastAssistant = m.role === "assistant" && i === lastAssistantIndex;
-                        return (
-                            <div key={i} className={cn("group flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-                                <div
-                                    className={cn(
-                                        "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
-                                        m.role === "user"
-                                            ? "bg-primary text-primary-foreground"
-                                            : "bg-muted text-foreground"
-                                    )}
-                                >
-                                    {m.images && m.images.length > 0 && (
-                                        <div className="mb-2 flex flex-wrap gap-1.5">
-                                            {m.images.map((img, imgIdx) => (
-                                                <img
-                                                    key={imgIdx}
-                                                    src={`data:${img.mimeType};base64,${img.data}`}
-                                                    alt="attachment"
-                                                    className="h-20 w-20 rounded-lg object-cover"
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                    {m.content ? (
-                                        <Markdown content={m.content} />
-                                    ) : isStreaming && i === messages.length - 1 ? (
-                                        "…"
-                                    ) : (
-                                        ""
-                                    )}
-                                </div>
-                                <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                    <button
-                                        onClick={() => handleCopyMessage(m.content, i)}
-                                        className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                        aria-label="Copy message"
-                                    >
-                                        {copiedIndex === i ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                                    </button>
-                                    {m.role === "user" && !isStreaming && (
-                                        <button
-                                            onClick={() => handleEditUserMessage(i)}
-                                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                            aria-label="Edit message"
-                                        >
-                                            <Pencil className="size-3.5" />
-                                        </button>
-                                    )}
-                                    {isLastAssistant && !isStreaming && (
-                                        <button
-                                            onClick={handleRegenerate}
-                                            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                            aria-label="Regenerate response"
-                                        >
-                                            <RotateCcw className="size-3.5" />
-                                        </button>
-                                    )}
-                                    {m.role === "assistant" && m.usage && (
-                                        <span className="self-center px-1 text-xs text-muted-foreground">
-                                            {formatUsage(m.usage, parsedModel?.provider, parsedModel?.modelId)}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
+                    {messages.map((m, i) => (
+                        <MessageBubble
+                            key={i}
+                            message={m}
+                            index={i}
+                            isLastAssistant={m.role === "assistant" && i === lastAssistantIndex}
+                            isStreaming={isStreaming}
+                            copied={copiedIndex === i}
+                            provider={parsedModel?.provider}
+                            modelId={parsedModel?.modelId}
+                            onCopy={handleCopyMessage}
+                            onEdit={handleEditUserMessage}
+                            onRegenerate={handleRegenerate}
+                        />
+                    ))}
                     <div ref={bottomRef} />
                 </div>
             </ScrollArea>
@@ -1021,6 +1070,7 @@ export default function Chat() {
                                 }
                                 size="icon"
                                 className="rounded-xl"
+                                aria-label="Send message"
                             >
                                 <Send />
                             </Button>

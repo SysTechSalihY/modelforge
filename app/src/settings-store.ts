@@ -1,6 +1,6 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { app } from "electron";
+import { readJson, writeJson } from "./json-store";
 
 export interface PromptPreset {
     id: string;
@@ -43,17 +43,11 @@ function filePath(): string {
 }
 
 export function getSettings(): AppSettings {
-    try {
-        const raw = fs.readFileSync(filePath(), "utf-8");
-        return { ...DEFAULTS, ...JSON.parse(raw) };
-    } catch {
-        return { ...DEFAULTS };
-    }
+    return { ...DEFAULTS, ...readJson<Partial<AppSettings>>(filePath(), {}) };
 }
 
 export function saveSettings(partial: Partial<AppSettings>): AppSettings {
     const merged = { ...getSettings(), ...partial };
-    fs.mkdirSync(path.dirname(filePath()), { recursive: true });
-    fs.writeFileSync(filePath(), JSON.stringify(merged, null, 2));
+    writeJson(filePath(), merged);
     return merged;
 }

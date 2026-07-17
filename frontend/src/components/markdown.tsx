@@ -53,7 +53,12 @@ export function Markdown({ content }: { content: string }) {
                         return <CodeBlock className={className}>{children}</CodeBlock>;
                     },
                     a: ({ className, ...props }) => (
-                        <a className={cn(className, "underline underline-offset-2")} target="_blank" rel="noreferrer" {...props} />
+                        <a
+                            className={cn(className, "underline underline-offset-2")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            {...props}
+                        />
                     ),
                 }}
             >

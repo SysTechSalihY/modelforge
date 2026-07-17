@@ -29,6 +29,11 @@ jobs:
         working-directory: app
         run: npm ci
 
+      - name: Run tests
+        run: |
+          npm --prefix frontend test
+          npm --prefix app test
+
       - name: Build and publish
         working-directory: app
         run: npm run build:all && npx electron-builder --publish always

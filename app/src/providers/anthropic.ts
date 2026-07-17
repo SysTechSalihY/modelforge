@@ -1,4 +1,5 @@
 import { streamSSE } from "./sse";
+import { describeHttpError, describeNetworkError } from "./errors";
 import type { ChatFn } from "./types";
 
 export const chat: ChatFn = async (apiKey, model, messages, options, onToken, signal) => {
@@ -24,28 +25,32 @@ export const chat: ChatFn = async (apiKey, model, messages, options, onToken, si
             };
         });
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-            model,
-            system: systemPrompt || undefined,
-            messages: conversation,
-            max_tokens: options?.maxTokens ?? 4096,
-            stream: true,
-            temperature: options?.temperature ?? 0.7,
-            top_p: options?.topP,
-        }),
-        signal,
-    });
+    let res: Response;
+    try {
+        res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-key": apiKey,
+                "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+                model,
+                system: systemPrompt || undefined,
+                messages: conversation,
+                max_tokens: options?.maxTokens ?? 4096,
+                stream: true,
+                temperature: options?.temperature ?? 0.7,
+                top_p: options?.topP,
+            }),
+            signal,
+        });
+    } catch (err) {
+        throw describeNetworkError("Anthropic", err);
+    }
 
     if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        throw new Error(`Anthropic request failed: ${res.status} ${errText}`);
+        throw new Error(await describeHttpError(res, "Anthropic"));
     }
 
     let promptTokens: number | undefined;

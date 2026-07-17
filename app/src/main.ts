@@ -1,6 +1,7 @@
 import * as path from "node:path";
-import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog, shell } from "electron";
 import * as ollama from "./ollama-manager";
+import { logger, getLogPath, getLogTail } from "./logger";
 import * as systemSpecs from "./system-specs";
 import * as settingsStore from "./settings-store";
 import * as sessionsStore from "./sessions-store";
@@ -25,14 +26,27 @@ const activeChatRequests = new Map<string, AbortController>();
 let isBusy = false;
 let forceClose = false;
 
+// Every ipcMain.handle callback below is only reachable from this app's own
+// preload-bridged renderer (contextIsolation is on, nodeIntegration is off),
+// so this isn't a hostile-input boundary in the way a public API would be.
+// Still, a malformed/undefined argument reaching a store function as `id`
+// would throw a raw TypeError several layers deep — validating up front
+// turns that into one clear, loggable error instead.
+function requireString(value: unknown, label: string): string {
+    if (typeof value !== "string" || !value) {
+        throw new Error(`Invalid ${label}: expected a non-empty string`);
+    }
+    return value;
+}
+
 // Without these, an unexpected error anywhere in the main process (a bad file
 // parse, a network hiccup, a third-party library throwing) would crash the
 // entire app instead of just failing the one operation that triggered it.
 process.on("uncaughtException", (err) => {
-    console.error("Uncaught exception in main process:", err);
+    logger.error(`Uncaught exception in main process: ${err.stack ?? err.message}`);
 });
 process.on("unhandledRejection", (reason) => {
-    console.error("Unhandled rejection in main process:", reason);
+    logger.error(`Unhandled rejection in main process: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`);
 });
 
 // Chromium's GPU process crashes on some virtualized/software-rendered setups
@@ -97,6 +111,29 @@ function createWindow(): void {
         }
     });
 
+    // Chat content can contain links (from the user or from a model's output).
+    // Without this, clicking one would either silently do nothing or open an
+    // unmanaged Electron window; instead hand it to the OS's default browser
+    // and keep every window in this app on our own trusted content only.
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url);
+        return { action: "deny" };
+    });
+    mainWindow.webContents.on("will-navigate", (event, url) => {
+        const currentUrl = mainWindow?.webContents.getURL() ?? "";
+        const sameOrigin = (() => {
+            try {
+                return new URL(url).origin === new URL(currentUrl).origin;
+            } catch {
+                return false;
+            }
+        })();
+        if (!sameOrigin) {
+            event.preventDefault();
+            shell.openExternal(url);
+        }
+    });
+
     if (!app.isPackaged) {
         mainWindow.loadURL("http://localhost:5173");
     } else {
@@ -110,16 +147,19 @@ function registerIpcHandlers(): void {
     ipcMain.handle("ollama:start", () => ollama.start());
     ipcMain.handle("ollama:stop", () => ollama.stop());
     ipcMain.handle("ollama:listModels", () => ollama.listModels());
-    ipcMain.handle("ollama:deleteModel", (_event: IpcMainInvokeEvent, name: string) => ollama.deleteModel(name));
+    ipcMain.handle("ollama:deleteModel", (_event: IpcMainInvokeEvent, name: string) =>
+        ollama.deleteModel(requireString(name, "model name"))
+    );
 
     ipcMain.handle(
         "ollama:pull",
         async (event: IpcMainInvokeEvent, { requestId, name }: { requestId: string; name: string }) => {
             const channel = `ollama:pull:progress:${requestId}`;
             try {
-                await ollama.pullModel(name, (chunk) => event.sender.send(channel, chunk));
+                await ollama.pullModel(requireString(name, "model name"), (chunk) => event.sender.send(channel, chunk));
                 return { done: true };
             } catch (err) {
+                logger.error(`Model pull failed for "${name}": ${(err as Error).message}`);
                 return { done: true, error: (err as Error).message };
             }
         }
@@ -165,6 +205,7 @@ function registerIpcHandlers(): void {
                 if (error.name === "AbortError") {
                     return { done: true, aborted: true };
                 }
+                logger.error(`Chat request failed (provider=${provider}, model=${model}): ${error.message}`);
                 return { done: true, error: error.message };
             } finally {
                 activeChatRequests.delete(requestId);
@@ -190,24 +231,31 @@ function registerIpcHandlers(): void {
     });
 
     ipcMain.handle("sessions:list", () => sessionsStore.listSessions());
-    ipcMain.handle("sessions:get", (_event: IpcMainInvokeEvent, id: string) => sessionsStore.getSession(id));
+    ipcMain.handle("sessions:get", (_event: IpcMainInvokeEvent, id: string) =>
+        sessionsStore.getSession(requireString(id, "session id"))
+    );
     ipcMain.handle(
         "sessions:create",
         (_event: IpcMainInvokeEvent, { model, projectId }: { model: string | null; projectId?: string | null }) =>
             sessionsStore.createSession(model, projectId ?? null)
     );
     ipcMain.handle("sessions:update", (_event: IpcMainInvokeEvent, { id, partial }) =>
-        sessionsStore.updateSession(id, partial)
+        sessionsStore.updateSession(requireString(id, "session id"), partial)
     );
-    ipcMain.handle("sessions:delete", (_event: IpcMainInvokeEvent, id: string) => sessionsStore.deleteSession(id));
+    ipcMain.handle("sessions:delete", (_event: IpcMainInvokeEvent, id: string) =>
+        sessionsStore.deleteSession(requireString(id, "session id"))
+    );
     ipcMain.handle("sessions:clearAll", () => sessionsStore.clearAll());
 
     ipcMain.handle("projects:list", () => projectsStore.listProjects());
-    ipcMain.handle("projects:create", (_event: IpcMainInvokeEvent, name: string) => projectsStore.createProject(name));
+    ipcMain.handle("projects:create", (_event: IpcMainInvokeEvent, name: string) =>
+        projectsStore.createProject(requireString(name, "project name"))
+    );
     ipcMain.handle("projects:update", (_event: IpcMainInvokeEvent, { id, partial }) =>
-        projectsStore.updateProject(id, partial)
+        projectsStore.updateProject(requireString(id, "project id"), partial)
     );
     ipcMain.handle("projects:delete", (_event: IpcMainInvokeEvent, id: string) => {
+        requireString(id, "project id");
         sessionsStore.unassignProject(id);
         projectsStore.deleteProject(id);
     });
@@ -216,18 +264,32 @@ function registerIpcHandlers(): void {
     ipcMain.handle("files:openFolderAndRead", () => fileReader.openFolderAndRead(mainWindow));
     ipcMain.handle("files:openMedia", () => fileReader.openAndReadMedia(mainWindow));
 
-    ipcMain.handle("secrets:has", (_event: IpcMainInvokeEvent, key: string) => secretsStore.hasSecret(key));
+    ipcMain.handle("secrets:has", (_event: IpcMainInvokeEvent, key: string) =>
+        secretsStore.hasSecret(requireString(key, "secret key"))
+    );
     ipcMain.handle("secrets:set", (_event: IpcMainInvokeEvent, { key, value }: { key: string; value: string }) =>
-        secretsStore.setSecret(key, value)
+        secretsStore.setSecret(requireString(key, "secret key"), value ?? "")
     );
 
     ipcMain.handle("app:setBusy", (_event: IpcMainInvokeEvent, busy: boolean) => {
         isBusy = busy;
     });
     ipcMain.handle("app:getVersion", () => app.getVersion());
+    ipcMain.handle("app:getDiagnostics", async () => ({
+        appVersion: app.getVersion(),
+        electron: process.versions.electron,
+        chrome: process.versions.chrome,
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        ollamaHost: ollama.getHost(),
+        ollamaRunning: await ollama.isRunning(),
+        logTail: getLogTail(),
+    }));
+    ipcMain.handle("app:openLogsFolder", () => shell.showItemInFolder(getLogPath()));
 
     ipcMain.handle("data:exportSession", (_event: IpcMainInvokeEvent, id: string) =>
-        dataTransfer.exportSession(mainWindow, id)
+        dataTransfer.exportSession(mainWindow, requireString(id, "session id"))
     );
     ipcMain.handle("data:exportAll", () => dataTransfer.exportAllSessions(mainWindow));
     ipcMain.handle("data:import", () => dataTransfer.importSessions(mainWindow));

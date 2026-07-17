@@ -1,7 +1,7 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "electron";
+import { readJson, writeJson } from "./json-store";
 import type { ChatOptions } from "./providers/types";
 
 export interface Project {
@@ -18,16 +18,11 @@ function filePath(): string {
 }
 
 function readAll(): Project[] {
-    try {
-        return JSON.parse(fs.readFileSync(filePath(), "utf-8"));
-    } catch {
-        return [];
-    }
+    return readJson<Project[]>(filePath(), []);
 }
 
 function writeAll(projects: Project[]): void {
-    fs.mkdirSync(path.dirname(filePath()), { recursive: true });
-    fs.writeFileSync(filePath(), JSON.stringify(projects, null, 2));
+    writeJson(filePath(), projects);
 }
 
 export function listProjects(): Project[] {

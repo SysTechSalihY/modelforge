@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from "node:child_process";
+import { logger } from "./logger";
 import type { ChatMessage, ChatChunk, ChatOptions } from "./providers/types";
 
 const DEFAULT_HOST = "http://127.0.0.1:11434";
@@ -82,12 +83,14 @@ export async function start(): Promise<OllamaStartResult> {
                 return { started: true };
             }
         }
+        logger.warn("Spawned `ollama serve` but it never became reachable within 10s");
         return { started: false, error: "timeout" };
     } catch (err) {
         const nodeErr = err as NodeJS.ErrnoException;
         if (nodeErr.code === "ENOENT") {
             return { started: false, error: "not-installed" };
         }
+        logger.error(`Failed to spawn \`ollama serve\`: ${nodeErr.message}`);
         return { started: false, error: nodeErr.message };
     }
 }
@@ -100,20 +103,48 @@ export function stop(): void {
     }
 }
 
+// Ollama error responses are JSON like {"error": "..."} — surface that text
+// instead of just the HTTP status so users see something actionable
+// ("model 'foo' not found" beats "Failed to list models: 404").
+async function describeError(res: Response, fallback: string): Promise<string> {
+    try {
+        const body = await res.json();
+        if (typeof body?.error === "string" && body.error) return body.error;
+    } catch {
+        // response wasn't JSON — fall through to the generic message
+    }
+    return `${fallback} (HTTP ${res.status})`;
+}
+
+function describeNetworkError(err: unknown): Error {
+    const message = err instanceof Error ? err.message : String(err);
+    return new Error(`Can't reach Ollama at ${HOST} — is it running? (${message})`);
+}
+
 export async function listModels(): Promise<OllamaModel[]> {
-    const res = await fetch(`${HOST}/api/tags`);
-    if (!res.ok) throw new Error(`Failed to list models: ${res.status}`);
+    let res: Response;
+    try {
+        res = await fetch(`${HOST}/api/tags`);
+    } catch (err) {
+        throw describeNetworkError(err);
+    }
+    if (!res.ok) throw new Error(await describeError(res, "Failed to list models"));
     const data = await res.json();
     return data.models || [];
 }
 
 export async function deleteModel(name: string): Promise<{ deleted: boolean }> {
-    const res = await fetch(`${HOST}/api/delete`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: name }),
-    });
-    if (!res.ok) throw new Error(`Failed to delete model: ${res.status}`);
+    let res: Response;
+    try {
+        res = await fetch(`${HOST}/api/delete`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: name }),
+        });
+    } catch (err) {
+        throw describeNetworkError(err);
+    }
+    if (!res.ok) throw new Error(await describeError(res, "Failed to delete model"));
     return { deleted: true };
 }
 
@@ -142,12 +173,17 @@ async function streamNdjson<T>(res: Response, onChunk: (chunk: T) => void): Prom
 }
 
 export async function pullModel(name: string, onProgress: (chunk: PullProgress) => void): Promise<void> {
-    const res = await fetch(`${HOST}/api/pull`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: name, stream: true }),
-    });
-    if (!res.ok || !res.body) throw new Error(`Failed to pull model: ${res.status}`);
+    let res: Response;
+    try {
+        res = await fetch(`${HOST}/api/pull`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: name, stream: true }),
+        });
+    } catch (err) {
+        throw describeNetworkError(err);
+    }
+    if (!res.ok || !res.body) throw new Error(await describeError(res, "Failed to pull model"));
     await streamNdjson<PullProgress>(res, onProgress);
 }
 
@@ -166,25 +202,31 @@ export async function chat(
         ...(m.images && m.images.length > 0 ? { images: m.images.map((i) => i.data) } : {}),
     }));
 
-    const res = await fetch(`${HOST}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            model,
-            messages: ollamaMessages,
-            stream: true,
-            options: {
-                temperature: options?.temperature ?? 0.7,
-                top_p: options?.topP,
-                num_predict: options?.maxTokens,
-                frequency_penalty: options?.frequencyPenalty,
-                presence_penalty: options?.presencePenalty,
-                num_ctx: options?.contextLength,
-            },
-        }),
-        signal,
-    });
-    if (!res.ok || !res.body) throw new Error(`Chat request failed: ${res.status}`);
+    let res: Response;
+    try {
+        res = await fetch(`${HOST}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                model,
+                messages: ollamaMessages,
+                stream: true,
+                options: {
+                    temperature: options?.temperature ?? 0.7,
+                    top_p: options?.topP,
+                    num_predict: options?.maxTokens,
+                    frequency_penalty: options?.frequencyPenalty,
+                    presence_penalty: options?.presencePenalty,
+                    num_ctx: options?.contextLength,
+                },
+            }),
+            signal,
+        });
+    } catch (err) {
+        if ((err as Error).name === "AbortError") throw err;
+        throw describeNetworkError(err);
+    }
+    if (!res.ok || !res.body) throw new Error(await describeError(res, "Chat request failed"));
 
     await streamNdjson<
         ChatChunk & { prompt_eval_count?: number; eval_count?: number }

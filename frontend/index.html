@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      script-src/style-src need 'unsafe-inline' because vite-plugin-singlefile
+      inlines the whole build into this one HTML file (matching Electron's
+      file:// loading model) — there's no separate script/style file to scope
+      a stricter policy to. connect-src is left open to http/https since the
+      Ollama host is user-configurable to any address. Everything else here
+      (no plugins, no frames, no base-tag hijacking, no form posts) is real
+      attack-surface reduction that doesn't depend on that trade-off.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';"
+    />
     <title>Modelforge</title>
   </head>
   <body>

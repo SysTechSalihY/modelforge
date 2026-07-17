@@ -10,6 +10,8 @@ import {
     FolderOpen,
     BookMarked,
     Settings2,
+    Bug,
+    Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +55,7 @@ export default function Settings() {
     const [openaiKeySet, setOpenaiKeySet] = useState(false);
     const [anthropicKeySet, setAnthropicKeySet] = useState(false);
     const [appVersion, setAppVersion] = useState<string | null>(null);
+    const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
     const [importMessage, setImportMessage] = useState<string | null>(null);
     const [ollamaHostInput, setOllamaHostInput] = useState("");
@@ -106,6 +109,22 @@ export default function Settings() {
         if (!confirm("Delete all conversations? This cannot be undone.")) return;
         await window.api.sessions.clearAll();
         await refreshSessions();
+    }
+
+    async function handleCopyDiagnostics() {
+        const d = await window.api.app.getDiagnostics();
+        const text = [
+            `Modelforge ${d.appVersion}`,
+            `Electron ${d.electron} / Chrome ${d.chrome} / Node ${d.node}`,
+            `Platform: ${d.platform} (${d.arch})`,
+            `Ollama host: ${d.ollamaHost} — ${d.ollamaRunning ? "reachable" : "unreachable"}`,
+            "",
+            "--- recent log output ---",
+            d.logTail || "(empty)",
+        ].join("\n");
+        await navigator.clipboard.writeText(text);
+        setDiagnosticsCopied(true);
+        setTimeout(() => setDiagnosticsCopied(false), 1500);
     }
 
     async function saveOpenaiKey() {
@@ -252,6 +271,7 @@ export default function Settings() {
                                         value={ollamaHostInput}
                                         onChange={(e) => setOllamaHostInput(e.target.value)}
                                         placeholder="http://127.0.0.1:11434"
+                                        aria-label={t.serverAddress}
                                         className="h-8 text-xs"
                                     />
                                     <Button size="sm" variant="outline" onClick={saveOllamaHost}>
@@ -323,6 +343,7 @@ export default function Settings() {
                                         value={openaiKeyInput}
                                         onChange={(e) => setOpenaiKeyInput(e.target.value)}
                                         placeholder={openaiKeySet ? "Replace API key..." : "sk-..."}
+                                        aria-label="ChatGPT (OpenAI) API key"
                                         className="h-8 text-xs"
                                     />
                                     <Button size="sm" variant="outline" onClick={saveOpenaiKey} disabled={!openaiKeyInput.trim()}>
@@ -344,6 +365,7 @@ export default function Settings() {
                                         value={anthropicKeyInput}
                                         onChange={(e) => setAnthropicKeyInput(e.target.value)}
                                         placeholder={anthropicKeySet ? "Replace API key..." : "sk-ant-..."}
+                                        aria-label="Claude (Anthropic) API key"
                                         className="h-8 text-xs"
                                     />
                                     <Button size="sm" variant="outline" onClick={saveAnthropicKey} disabled={!anthropicKeyInput.trim()}>
@@ -363,6 +385,7 @@ export default function Settings() {
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         placeholder="Search any model, e.g. codellama:13b, mixtral:8x7b..."
+                                        aria-label="Search models"
                                         className="pl-8"
                                     />
                                 </div>
@@ -378,15 +401,25 @@ export default function Settings() {
                                                   <Progress value={progress} className="h-1.5 w-20" />
                                               )}
                                               {isInstalled ? (
-                                                  <Button size="icon" variant="ghost" onClick={() => deleteModel(m.name)}>
+                                                  <Button
+                                                      size="icon"
+                                                      variant="ghost"
+                                                      onClick={() => deleteModel(m.name)}
+                                                      aria-label={`Delete ${m.name}`}
+                                                  >
                                                       <Trash2 className="text-destructive" />
                                                   </Button>
                                               ) : progress !== undefined ? (
-                                                  <Button size="icon" variant="outline" disabled>
+                                                  <Button size="icon" variant="outline" disabled aria-label={`Downloading ${m.name}`}>
                                                       <Loader2 className="animate-spin" />
                                                   </Button>
                                               ) : (
-                                                  <Button size="icon" variant="outline" onClick={() => pullModel(m.name)}>
+                                                  <Button
+                                                      size="icon"
+                                                      variant="outline"
+                                                      onClick={() => pullModel(m.name)}
+                                                      aria-label={`Download ${m.name}`}
+                                                  >
                                                       <Download />
                                                   </Button>
                                               )}
@@ -410,15 +443,25 @@ export default function Settings() {
                                                       <p className="text-xs text-muted-foreground">Needs ~{m.minRAMGB} GB RAM</p>
                                                   </div>
                                                   {isInstalled ? (
-                                                      <Button size="icon" variant="ghost" onClick={() => deleteModel(m.name)}>
+                                                      <Button
+                                                          size="icon"
+                                                          variant="ghost"
+                                                          onClick={() => deleteModel(m.name)}
+                                                          aria-label={`Delete ${m.name}`}
+                                                      >
                                                           <Trash2 className="text-destructive" />
                                                       </Button>
                                                   ) : progress !== undefined ? (
-                                                      <Button size="icon" variant="outline" disabled>
+                                                      <Button size="icon" variant="outline" disabled aria-label={`Downloading ${m.name}`}>
                                                           <Loader2 className="animate-spin" />
                                                       </Button>
                                                   ) : (
-                                                      <Button size="icon" variant="outline" onClick={() => pullModel(m.name)}>
+                                                      <Button
+                                                          size="icon"
+                                                          variant="outline"
+                                                          onClick={() => pullModel(m.name)}
+                                                          aria-label={`Download ${m.name}`}
+                                                      >
                                                           <Download />
                                                       </Button>
                                                   )}
@@ -434,11 +477,16 @@ export default function Settings() {
                                     description="Not in the catalog — pull this exact model tag from Ollama's library."
                                 >
                                     {pulling[search.trim()] !== undefined ? (
-                                        <Button size="icon" variant="outline" disabled>
+                                        <Button size="icon" variant="outline" disabled aria-label={`Downloading ${search.trim()}`}>
                                             <Loader2 className="animate-spin" />
                                         </Button>
                                     ) : (
-                                        <Button size="icon" variant="outline" onClick={() => pullModel(search.trim())}>
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            onClick={() => pullModel(search.trim())}
+                                            aria-label={`Download ${search.trim()}`}
+                                        >
                                             <Download />
                                         </Button>
                                     )}
@@ -450,7 +498,12 @@ export default function Settings() {
                             <SettingsSection title={t.otherInstalledModels}>
                                 {otherInstalled.map((m) => (
                                     <SettingsRow key={m.name} label={m.name} description={`${formatBytes(m.size)} · installed`}>
-                                        <Button size="icon" variant="ghost" onClick={() => deleteModel(m.name)}>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => deleteModel(m.name)}
+                                            aria-label={`Delete ${m.name}`}
+                                        >
                                             <Trash2 className="text-destructive" />
                                         </Button>
                                     </SettingsRow>
@@ -503,8 +556,9 @@ export default function Settings() {
                                     <SettingsRow label="Model parameters" description={t.penaltyClaudeNote} stacked>
                                         <div className="grid grid-cols-3 gap-3">
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.temperature}</label>
+                                                <label htmlFor="setting-temperature" className="text-xs text-muted-foreground">{t.temperature}</label>
                                                 <Input
+                                                    id="setting-temperature"
                                                     type="number"
                                                     min={0}
                                                     max={2}
@@ -514,8 +568,9 @@ export default function Settings() {
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.topP}</label>
+                                                <label htmlFor="setting-topP" className="text-xs text-muted-foreground">{t.topP}</label>
                                                 <Input
+                                                    id="setting-topP"
                                                     type="number"
                                                     min={0}
                                                     max={1}
@@ -525,8 +580,9 @@ export default function Settings() {
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.maxTokens}</label>
+                                                <label htmlFor="setting-maxTokens" className="text-xs text-muted-foreground">{t.maxTokens}</label>
                                                 <Input
+                                                    id="setting-maxTokens"
                                                     type="number"
                                                     min={1}
                                                     step={1}
@@ -535,8 +591,9 @@ export default function Settings() {
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.contextLength}</label>
+                                                <label htmlFor="setting-contextLength" className="text-xs text-muted-foreground">{t.contextLength}</label>
                                                 <Input
+                                                    id="setting-contextLength"
                                                     type="number"
                                                     min={512}
                                                     step={512}
@@ -545,8 +602,9 @@ export default function Settings() {
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.frequencyPenalty}</label>
+                                                <label htmlFor="setting-frequencyPenalty" className="text-xs text-muted-foreground">{t.frequencyPenalty}</label>
                                                 <Input
+                                                    id="setting-frequencyPenalty"
                                                     type="number"
                                                     min={-2}
                                                     max={2}
@@ -556,8 +614,9 @@ export default function Settings() {
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">
-                                                <label className="text-xs text-muted-foreground">{t.presencePenalty}</label>
+                                                <label htmlFor="setting-presencePenalty" className="text-xs text-muted-foreground">{t.presencePenalty}</label>
                                                 <Input
+                                                    id="setting-presencePenalty"
                                                     type="number"
                                                     min={-2}
                                                     max={2}
@@ -573,6 +632,7 @@ export default function Settings() {
                                         <Textarea
                                             value={settings.systemPrompt}
                                             onChange={(e) => saveSettings({ systemPrompt: e.target.value })}
+                                            aria-label={t.systemPrompt}
                                             className="min-h-24"
                                         />
                                     </SettingsRow>
@@ -587,7 +647,12 @@ export default function Settings() {
                                             <Button size="sm" variant="outline" onClick={() => applyPreset(preset.prompt)}>
                                                 {t.apply}
                                             </Button>
-                                            <Button size="icon" variant="ghost" onClick={() => deletePreset(preset.id)}>
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                onClick={() => deletePreset(preset.id)}
+                                                aria-label={`Delete preset ${preset.name}`}
+                                            >
                                                 <Trash2 className="text-destructive" />
                                             </Button>
                                         </SettingsRow>
@@ -599,6 +664,7 @@ export default function Settings() {
                                                 onChange={(e) => setNewPresetName(e.target.value)}
                                                 onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
                                                 placeholder={t.presetName}
+                                                aria-label={t.presetName}
                                                 className="h-8 text-xs"
                                             />
                                             <Button
@@ -646,6 +712,25 @@ export default function Settings() {
                                     </Button>
                                 </SettingsRow>
                             )}
+                        </SettingsSection>
+
+                        <SettingsSection title={t.diagnostics} description={t.diagnosticsDescription}>
+                            <SettingsRow label={t.copyDiagnosticInfo}>
+                                <Button size="sm" variant="outline" onClick={handleCopyDiagnostics} className="gap-1.5">
+                                    {diagnosticsCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                                    {diagnosticsCopied ? t.copied : t.copyDiagnosticInfo}
+                                </Button>
+                            </SettingsRow>
+                            <SettingsRow label={t.openLogsFolder}>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => window.api.app.openLogsFolder()}
+                                    className="gap-1.5"
+                                >
+                                    <Bug className="size-4" /> {t.open}
+                                </Button>
+                            </SettingsRow>
                         </SettingsSection>
                     </div>
                 </div>

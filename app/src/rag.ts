@@ -30,7 +30,7 @@ const CHUNK_OVERLAP = 150;
 const EMBED_BATCH_SIZE = 8;
 const EMBEDDING_MODEL = "nomic-embed-text";
 
-function chunkText(text: string): string[] {
+export function chunkText(text: string): string[] {
     if (text.length <= CHUNK_SIZE) return [text];
     const chunks: string[] = [];
     let start = 0;
@@ -58,7 +58,7 @@ async function embed(text: string): Promise<number[] | null> {
     }
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
     let dot = 0;
     let normA = 0;
     let normB = 0;

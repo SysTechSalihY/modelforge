@@ -1,7 +1,7 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "electron";
+import { readJson, writeJson } from "./json-store";
 import type { ChatMessage, ChatOptions } from "./providers/types";
 
 export type { ChatMessage };
@@ -23,16 +23,11 @@ function filePath(): string {
 }
 
 function readAll(): ChatSession[] {
-    try {
-        return JSON.parse(fs.readFileSync(filePath(), "utf-8"));
-    } catch {
-        return [];
-    }
+    return readJson<ChatSession[]>(filePath(), []);
 }
 
 function writeAll(sessions: ChatSession[]): void {
-    fs.mkdirSync(path.dirname(filePath()), { recursive: true });
-    fs.writeFileSync(filePath(), JSON.stringify(sessions, null, 2));
+    writeJson(filePath(), sessions);
 }
 
 export function listSessions(): ChatSession[] {

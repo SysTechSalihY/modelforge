@@ -60,6 +60,11 @@ export interface Dictionary {
     clearAll: string;
     dataLocation: string;
     open: string;
+    diagnostics: string;
+    diagnosticsDescription: string;
+    copyDiagnosticInfo: string;
+    copied: string;
+    openLogsFolder: string;
     language: string;
     general: string;
     providers: string;
@@ -131,6 +136,11 @@ export const en: Dictionary = {
     clearAll: "Clear all",
     dataLocation: "Data location",
     open: "Open",
+    diagnostics: "Diagnostics",
+    diagnosticsDescription: "Useful when reporting a bug: app/system versions, Ollama connection status, and recent log output.",
+    copyDiagnosticInfo: "Copy diagnostic info",
+    copied: "Copied",
+    openLogsFolder: "Open logs folder",
     language: "Language",
     general: "General",
     providers: "Providers",
@@ -203,6 +213,11 @@ export const tr: Dictionary = {
     clearAll: "Tümünü temizle",
     dataLocation: "Veri konumu",
     open: "Aç",
+    diagnostics: "Tanılama",
+    diagnosticsDescription: "Hata bildirirken faydalıdır: uygulama/sistem sürümleri, Ollama bağlantı durumu ve son günlük çıktısı.",
+    copyDiagnosticInfo: "Tanılama bilgisini kopyala",
+    copied: "Kopyalandı",
+    openLogsFolder: "Günlük klasörünü aç",
     language: "Dil",
     general: "Genel",
     providers: "Sağlayıcılar",
