@@ -49,7 +49,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "SysTechSalihY",
+      "owner": "voidstackloop",
       "repo": "modelforge"
     }
   },
