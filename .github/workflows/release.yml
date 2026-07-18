@@ -57,7 +57,7 @@ jobs:
             app/release/*.dmg.blockmap
             app/release/*.zip
             app/release/*.AppImage
-            app/release/*.yml
+            app/release/latest*.yml
           if-no-files-found: ignore
 
   publish-release:

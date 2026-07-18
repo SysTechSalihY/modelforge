@@ -45,7 +45,11 @@
       "target": ["AppImage"]
     },
     "mac": {
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ]
     },
     "publish": {
       "provider": "github",
