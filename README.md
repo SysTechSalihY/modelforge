@@ -53,7 +53,7 @@ A desktop chat client for [Ollama](https://ollama.com) that also talks to OpenAI
 Download the latest installer for your platform from the [Releases](../../releases) page.
 
 - **Windows** — `Modelforge Setup *.exe`
-- **macOS** — `Modelforge-*.dmg`
+- **macOS** — `Modelforge-*.dmg` ⚠️ **not yet tested on real hardware** — it builds and should run (Electron is cross-platform and nothing in this codebase is Windows/Linux-specific), but no one has verified it on an actual Mac yet. Code signing/notarization also isn't set up, so Gatekeeper will likely block it until you right-click → Open. Use at your own risk and please [open an issue](../../issues) if you try it.
 - **Linux** — `Modelforge-*.AppImage`
 
 Modelforge talks to a local [Ollama](https://ollama.com) install by default — no API key required. OpenAI and Anthropic support is optional: add your API key in **Settings** only if you want to use those providers.
