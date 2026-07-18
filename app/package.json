@@ -50,8 +50,7 @@
     "publish": {
       "provider": "github",
       "owner": "voidstackloop",
-      "repo": "modelforge",
-      "draft": false
+      "repo": "modelforge"
     }
   },
   "devDependencies": {

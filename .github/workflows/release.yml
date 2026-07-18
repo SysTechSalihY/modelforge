@@ -42,3 +42,16 @@ jobs:
         run: npm run build:all && npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # electron-builder always creates the GitHub release as a draft (its
+      # config schema doesn't accept "draft: false" as of this app's last
+      # update) — un-draft it here once every platform has finished
+      # uploading, so the tag doesn't need a manual "Publish release" click.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
