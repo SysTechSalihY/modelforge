@@ -37,21 +37,50 @@ jobs:
           npm --prefix frontend test
           npm --prefix app test
 
-      - name: Build and publish
+      # Build only — no publish here. Three parallel jobs each trying to
+      # create/find the same GitHub release is a known electron-builder race:
+      # only one reliably wins, and the others can exit 0 while silently
+      # skipping their own upload. Publishing happens once, sequentially,
+      # in the job below instead.
+      - name: Build
         working-directory: app
-        run: npm run build:all && npx electron-builder --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:all && npx electron-builder --publish never
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: |
+            app/release/*.exe
+            app/release/*.exe.blockmap
+            app/release/*.dmg
+            app/release/*.dmg.blockmap
+            app/release/*.zip
+            app/release/*.AppImage
+            app/release/*.yml
+          if-no-files-found: ignore
 
   publish-release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # electron-builder always creates the GitHub release as a draft (its
-      # config schema doesn't accept "draft: false" as of this app's last
-      # update) — un-draft it here once every platform has finished
-      # uploading, so the tag doesn't need a manual "Publish release" click.
-      - name: Publish the release
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List downloaded assets
+        run: ls -la dist
+
+      - name: Publish release with all platform assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --draft=false \
+          || gh release upload "${{ github.ref_name }}" dist/* \
+            --repo "${{ github.repository }}" \
+            --clobber
