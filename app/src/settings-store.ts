@@ -2,10 +2,21 @@ import * as path from "node:path";
 import { app } from "electron";
 import { readJson, writeJson } from "./json-store";
 
+export interface PromptVersion {
+    prompt: string;
+    savedAt: string;
+}
+
 export interface PromptPreset {
     id: string;
     name: string;
     prompt: string;
+    // Previous versions of `prompt`, newest first, capped at 10 — pushed here
+    // whenever an edit overwrites the current content, so a bad edit can be
+    // undone.
+    versions?: PromptVersion[];
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface AppSettings {

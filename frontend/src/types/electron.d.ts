@@ -81,10 +81,18 @@ export interface ModelRecommendations {
   models: RecommendedModel[];
 }
 
+export interface PromptVersion {
+  prompt: string;
+  savedAt: string;
+}
+
 export interface PromptPreset {
   id: string;
   name: string;
   prompt: string;
+  versions?: PromptVersion[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AppSettings {

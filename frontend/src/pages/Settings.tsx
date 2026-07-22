@@ -13,9 +13,12 @@ import {
     Bug,
     Copy,
     RefreshCw,
+    Pencil,
+    History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -30,7 +33,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import type { AppSettings, ModelRecommendations, OllamaModel, SystemSpecs } from "@/types/electron";
+import type { AppSettings, ModelRecommendations, OllamaModel, SystemSpecs, PromptPreset, PromptVersion } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
 import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef } from "@/lib/providers";
 import { useSessions } from "@/lib/sessions-context";
@@ -86,6 +89,9 @@ export default function Settings() {
     const [importMessage, setImportMessage] = useState<string | null>(null);
     const [ollamaHostInput, setOllamaHostInput] = useState("");
     const [newPresetName, setNewPresetName] = useState("");
+    const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+    const [editDraftName, setEditDraftName] = useState("");
+    const [editDraftPrompt, setEditDraftPrompt] = useState("");
     const { refresh: refreshSessions } = useSessions();
     const activePullCount = useRef(0);
 
@@ -220,17 +226,74 @@ export default function Settings() {
         await window.api.settings.save(partial);
     }
 
+    const MAX_PRESET_VERSIONS = 10;
+
     async function handleSavePreset() {
         if (!settings) return;
         const name = newPresetName.trim();
         if (!name) return;
-        const preset = { id: crypto.randomUUID(), name, prompt: settings.systemPrompt };
+        const now = new Date().toISOString();
+        const preset: PromptPreset = {
+            id: crypto.randomUUID(),
+            name,
+            prompt: settings.systemPrompt,
+            versions: [],
+            createdAt: now,
+            updatedAt: now,
+        };
         await saveSettings({ promptPresets: [...settings.promptPresets, preset] });
         setNewPresetName("");
     }
 
     function applyPreset(prompt: string) {
         saveSettings({ systemPrompt: prompt });
+    }
+
+    function startEditPreset(preset: PromptPreset) {
+        setEditingPresetId(preset.id);
+        setEditDraftName(preset.name);
+        setEditDraftPrompt(preset.prompt);
+    }
+
+    function cancelEditPreset() {
+        setEditingPresetId(null);
+    }
+
+    async function saveEditedPreset(preset: PromptPreset) {
+        if (!settings) return;
+        const name = editDraftName.trim();
+        if (!name) return;
+        const now = new Date().toISOString();
+        const promptChanged = preset.prompt !== editDraftPrompt;
+        const updated: PromptPreset = {
+            ...preset,
+            name,
+            prompt: editDraftPrompt,
+            versions: promptChanged
+                ? [{ prompt: preset.prompt, savedAt: preset.updatedAt ?? preset.createdAt ?? now }, ...(preset.versions ?? [])].slice(
+                      0,
+                      MAX_PRESET_VERSIONS
+                  )
+                : preset.versions,
+            updatedAt: now,
+        };
+        await saveSettings({ promptPresets: settings.promptPresets.map((p) => (p.id === preset.id ? updated : p)) });
+        setEditingPresetId(null);
+    }
+
+    async function restorePresetVersion(preset: PromptPreset, version: PromptVersion) {
+        if (!settings) return;
+        const now = new Date().toISOString();
+        const updated: PromptPreset = {
+            ...preset,
+            prompt: version.prompt,
+            versions: [{ prompt: preset.prompt, savedAt: preset.updatedAt ?? now }, ...(preset.versions ?? [])].slice(
+                0,
+                MAX_PRESET_VERSIONS
+            ),
+            updatedAt: now,
+        };
+        await saveSettings({ promptPresets: settings.promptPresets.map((p) => (p.id === preset.id ? updated : p)) });
     }
 
     function deletePreset(id: string) {
@@ -803,23 +866,96 @@ export default function Settings() {
 
                                 <SettingsSection
                                     title={t.promptLibrary}
+                                    description={t.promptLibraryVariablesHint}
                                     className="mt-8"
                                 >
-                                    {settings.promptPresets.map((preset) => (
-                                        <SettingsRow key={preset.id} label={preset.name} description={preset.prompt}>
-                                            <Button size="sm" variant="outline" onClick={() => applyPreset(preset.prompt)}>
-                                                {t.apply}
-                                            </Button>
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                onClick={() => deletePreset(preset.id)}
-                                                aria-label={`Delete preset ${preset.name}`}
-                                            >
-                                                <Trash2 className="text-destructive" />
-                                            </Button>
-                                        </SettingsRow>
-                                    ))}
+                                    {settings.promptPresets.map((preset) =>
+                                        editingPresetId === preset.id ? (
+                                            <SettingsRow key={preset.id} stacked>
+                                                <div className="flex w-full flex-col gap-2">
+                                                    <Input
+                                                        value={editDraftName}
+                                                        onChange={(e) => setEditDraftName(e.target.value)}
+                                                        placeholder={t.presetName}
+                                                        aria-label={t.presetName}
+                                                        className="h-8 text-xs"
+                                                    />
+                                                    <Textarea
+                                                        value={editDraftPrompt}
+                                                        onChange={(e) => setEditDraftPrompt(e.target.value)}
+                                                        className="min-h-20 text-xs"
+                                                    />
+                                                    <div className="flex gap-1.5">
+                                                        <Button size="sm" onClick={() => saveEditedPreset(preset)} disabled={!editDraftName.trim()}>
+                                                            {t.savePreset}
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" onClick={cancelEditPreset}>
+                                                            {t.cancel}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </SettingsRow>
+                                        ) : (
+                                            <SettingsRow key={preset.id} label={preset.name} description={preset.prompt}>
+                                                <Button size="sm" variant="outline" onClick={() => applyPreset(preset.prompt)}>
+                                                    {t.apply}
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    onClick={() => startEditPreset(preset)}
+                                                    aria-label={`${t.editPreset} ${preset.name}`}
+                                                >
+                                                    <Pencil />
+                                                </Button>
+                                                <Popover>
+                                                    <PopoverTrigger
+                                                        render={
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                aria-label={`${t.presetHistory}: ${preset.name}`}
+                                                            >
+                                                                <History />
+                                                            </Button>
+                                                        }
+                                                    />
+                                                    <PopoverContent className="w-72">
+                                                        <p className="mb-2 text-xs font-medium">{t.presetHistory}</p>
+                                                        {(preset.versions ?? []).length === 0 ? (
+                                                            <p className="text-xs text-muted-foreground">{t.noPreviousVersions}</p>
+                                                        ) : (
+                                                            <div className="flex max-h-64 flex-col gap-2 overflow-auto">
+                                                                {(preset.versions ?? []).map((v, i) => (
+                                                                    <div key={i} className="rounded-md border border-border p-2">
+                                                                        <p className="mb-1 text-[10px] text-muted-foreground">
+                                                                            {new Date(v.savedAt).toLocaleString()}
+                                                                        </p>
+                                                                        <p className="mb-2 line-clamp-3 text-xs">{v.prompt}</p>
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            onClick={() => restorePresetVersion(preset, v)}
+                                                                        >
+                                                                            {t.restore}
+                                                                        </Button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </PopoverContent>
+                                                </Popover>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    onClick={() => deletePreset(preset.id)}
+                                                    aria-label={`Delete preset ${preset.name}`}
+                                                >
+                                                    <Trash2 className="text-destructive" />
+                                                </Button>
+                                            </SettingsRow>
+                                        )
+                                    )}
                                     <SettingsRow stacked>
                                         <div className="flex gap-1.5">
                                             <Input

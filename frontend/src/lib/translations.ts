@@ -71,6 +71,15 @@ export interface Dictionary {
     savePromptAsPreset: string;
     presetName: string;
     apply: string;
+    cancel: string;
+    fillPromptVariables: string;
+    fillPromptVariablesHelp: string;
+    editPreset: string;
+    presetHistory: string;
+    restore: string;
+    noPreviousVersions: string;
+    savePreset: string;
+    promptLibraryVariablesHint: string;
     resetToDefault: string;
     usingCustomPrompt: string;
     dataManagement: string;
@@ -180,6 +189,15 @@ export const en: Dictionary = {
     savePromptAsPreset: "Save current prompt as preset",
     presetName: "Preset name...",
     apply: "Apply",
+    cancel: "Cancel",
+    fillPromptVariables: "Fill in prompt variables",
+    fillPromptVariablesHelp: "This prompt has blanks to fill in before it's applied.",
+    editPreset: "Edit",
+    presetHistory: "History",
+    restore: "Restore",
+    noPreviousVersions: "No previous versions yet.",
+    savePreset: "Save",
+    promptLibraryVariablesHint: "Add {{variables}} to a prompt (e.g. {{topic}}) and you'll be asked to fill them in each time you apply it. Edits keep version history so you can undo a change.",
     resetToDefault: "Reset to default",
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
@@ -297,6 +315,15 @@ export const tr: Dictionary = {
     savePromptAsPreset: "Mevcut istemi ön ayar olarak kaydet",
     presetName: "Ön ayar adı...",
     apply: "Uygula",
+    cancel: "İptal",
+    fillPromptVariables: "İstem değişkenlerini doldurun",
+    fillPromptVariablesHelp: "Bu istemde uygulanmadan önce doldurulması gereken boşluklar var.",
+    editPreset: "Düzenle",
+    presetHistory: "Geçmiş",
+    restore: "Geri yükle",
+    noPreviousVersions: "Henüz önceki bir sürüm yok.",
+    savePreset: "Kaydet",
+    promptLibraryVariablesHint: "Bir isteme {{değişkenler}} ekleyin (ör. {{konu}}) — her uyguladığınızda bunları doldurmanız istenir. Düzenlemeler sürüm geçmişini korur, böylece bir değişikliği geri alabilirsiniz.",
     resetToDefault: "Varsayılana dön",
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",

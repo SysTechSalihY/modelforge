@@ -47,6 +47,8 @@ import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef, parseModelRef } from "@/lib/providers";
 import { estimateCost, formatCost } from "@/lib/pricing";
+import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
+import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
 import type {
     ChatMessage,
     OllamaModel,
@@ -58,6 +60,7 @@ import type {
     ChatOptions,
     UsageInfo,
     ToolCall,
+    PromptPreset,
 } from "@/types/electron";
 
 type Attachment = AttachedFile & { folder?: string };
@@ -260,6 +263,7 @@ export default function Chat() {
     const [agentMode, setAgentMode] = useState(false);
     const [agentWorkspace, setAgentWorkspace] = useState<string | null>(null);
     const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([]);
+    const [pendingVariablePreset, setPendingVariablePreset] = useState<PromptPreset | null>(null);
     const [agentStepCount, setAgentStepCount] = useState(0);
     const [autoApprovedTools, setAutoApprovedTools] = useState<Set<string>>(new Set());
     const [newPresetName, setNewPresetName] = useState("");
@@ -664,6 +668,17 @@ export default function Chat() {
         if (sessionId) window.api.sessions.update(sessionId, { systemPrompt: prompt });
     }
 
+    // Presets with {{variables}} need values filled in before they're usable
+    // as a system prompt — presets without any apply immediately as before.
+    function selectPromptPreset(preset: PromptPreset) {
+        const variables = extractVariables(preset.prompt);
+        if (variables.length === 0) {
+            applyPromptPreset(preset.prompt);
+        } else {
+            setPendingVariablePreset(preset);
+        }
+    }
+
     function resetPromptToDefault() {
         setSessionSystemPrompt(null);
         if (sessionId) window.api.sessions.update(sessionId, { systemPrompt: null });
@@ -679,7 +694,8 @@ export default function Chat() {
         const name = newPresetName.trim();
         const prompt = sessionSystemPrompt ?? settings.systemPrompt;
         if (!name || !prompt.trim()) return;
-        const preset = { id: crypto.randomUUID(), name, prompt };
+        const now = new Date().toISOString();
+        const preset: PromptPreset = { id: crypto.randomUUID(), name, prompt, versions: [], createdAt: now, updatedAt: now };
         const updated = await window.api.settings.save({ promptPresets: [...settings.promptPresets, preset] });
         setSettings(updated);
         setNewPresetName("");
@@ -931,7 +947,7 @@ export default function Chat() {
                                     {settings.promptPresets.map((preset) => (
                                         <button
                                             key={preset.id}
-                                            onClick={() => applyPromptPreset(preset.prompt)}
+                                            onClick={() => selectPromptPreset(preset)}
                                             className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
                                         >
                                             <span className="truncate font-medium">{preset.name}</span>
@@ -1363,6 +1379,16 @@ export default function Chat() {
                     </div>
                 </div>
             </div>
+            <PromptVariableDialog
+                open={pendingVariablePreset !== null}
+                onOpenChange={(open) => {
+                    if (!open) setPendingVariablePreset(null);
+                }}
+                variables={pendingVariablePreset ? extractVariables(pendingVariablePreset.prompt) : []}
+                onSubmit={(values) => {
+                    if (pendingVariablePreset) applyPromptPreset(fillTemplate(pendingVariablePreset.prompt, values));
+                }}
+            />
         </div>
     );
 }

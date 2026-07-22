@@ -24,7 +24,9 @@ import { CommandPalette } from "@/components/command-palette";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { ChatOptions, ChatSession, Project } from "@/types/electron";
+import type { ChatOptions, ChatSession, Project, PromptPreset } from "@/types/electron";
+import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
+import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
 
 function SessionRow({
     session,
@@ -79,8 +81,9 @@ function ProjectGroup({
     const [name, setName] = useState(project.name);
     const [instructions, setInstructions] = useState(project.instructions);
     const [params, setParams] = useState<ChatOptions>(project.params ?? {});
-    const [presets, setPresets] = useState<{ id: string; name: string; prompt: string }[]>([]);
+    const [presets, setPresets] = useState<PromptPreset[]>([]);
     const [newPresetName, setNewPresetName] = useState("");
+    const [pendingVariablePreset, setPendingVariablePreset] = useState<PromptPreset | null>(null);
 
     async function handleSave() {
         await updateProject(project.id, { name, instructions });
@@ -102,11 +105,21 @@ function ProjectGroup({
         updateProject(project.id, { instructions: prompt });
     }
 
+    function selectPreset(preset: PromptPreset) {
+        const variables = extractVariables(preset.prompt);
+        if (variables.length === 0) {
+            applyPreset(preset.prompt);
+        } else {
+            setPendingVariablePreset(preset);
+        }
+    }
+
     async function saveCurrentAsPreset() {
         const name = newPresetName.trim();
         if (!name || !instructions.trim()) return;
         const settings = await window.api.settings.get();
-        const preset = { id: crypto.randomUUID(), name, prompt: instructions };
+        const now = new Date().toISOString();
+        const preset: PromptPreset = { id: crypto.randomUUID(), name, prompt: instructions, versions: [], createdAt: now, updatedAt: now };
         await window.api.settings.save({ promptPresets: [...settings.promptPresets, preset] });
         setPresets([...settings.promptPresets, preset]);
         setNewPresetName("");
@@ -182,7 +195,7 @@ function ProjectGroup({
                                         {presets.map((preset) => (
                                             <button
                                                 key={preset.id}
-                                                onClick={() => applyPreset(preset.prompt)}
+                                                onClick={() => selectPreset(preset)}
                                                 className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
                                             >
                                                 <span className="truncate font-medium">{preset.name}</span>
@@ -399,6 +412,16 @@ function ProjectGroup({
                     ))}
                 </div>
             )}
+            <PromptVariableDialog
+                open={pendingVariablePreset !== null}
+                onOpenChange={(open) => {
+                    if (!open) setPendingVariablePreset(null);
+                }}
+                variables={pendingVariablePreset ? extractVariables(pendingVariablePreset.prompt) : []}
+                onSubmit={(values) => {
+                    if (pendingVariablePreset) applyPreset(fillTemplate(pendingVariablePreset.prompt, values));
+                }}
+            />
         </div>
     );
 }
