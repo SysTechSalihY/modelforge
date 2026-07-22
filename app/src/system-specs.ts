@@ -14,7 +14,12 @@ export interface SystemSpecs {
     cpuCores: number;
     platform: NodeJS.Platform;
     arch: string;
+    // Kept for backward compatibility with anything expecting a single GPU —
+    // this is just gpus[0]. Prefer `gpus` and `totalVramGB` for anything
+    // multi-GPU-aware.
     gpu: GpuInfo | null;
+    gpus: GpuInfo[];
+    totalVramGB: number | null;
 }
 
 export interface ModelCatalogEntry {
@@ -72,17 +77,25 @@ function execFileP(cmd: string, args: string[]): Promise<string | null> {
     });
 }
 
-async function detectGpu(): Promise<GpuInfo | null> {
-    // NVIDIA tooling works the same way on Windows and Linux when drivers are installed.
+// Returns every GPU nvidia-smi/PowerShell/system_profiler reports, not just
+// the first one — a single-GPU read silently undercounts available VRAM
+// (and therefore which models "fit") on any multi-GPU machine.
+async function detectGpus(): Promise<GpuInfo[]> {
+    // NVIDIA tooling works the same way on Windows and Linux when drivers are
+    // installed, and reports one CSV line per GPU when there's more than one.
     const nvidiaOut = await execFileP("nvidia-smi", [
         "--query-gpu=name,memory.total",
         "--format=csv,noheader,nounits",
     ]);
     if (nvidiaOut) {
-        const [name, memMiB] = nvidiaOut.split(",").map((s) => s.trim());
-        if (name && memMiB && !Number.isNaN(Number(memMiB))) {
-            return { name, vramGB: +(Number(memMiB) / 1024).toFixed(1), vendor: "nvidia" };
+        const gpus: GpuInfo[] = [];
+        for (const line of nvidiaOut.trim().split("\n")) {
+            const [name, memMiB] = line.split(",").map((s) => s.trim());
+            if (name && memMiB && !Number.isNaN(Number(memMiB))) {
+                gpus.push({ name, vramGB: +(Number(memMiB) / 1024).toFixed(1), vendor: "nvidia" });
+            }
         }
+        if (gpus.length > 0) return gpus;
     }
 
     if (os.platform() === "win32") {
@@ -94,17 +107,20 @@ async function detectGpu(): Promise<GpuInfo | null> {
         if (out) {
             try {
                 const parsed = JSON.parse(out);
-                const gpu = Array.isArray(parsed) ? parsed[0] : parsed;
-                // AdapterRAM is a known-buggy 32-bit field on Windows for GPUs with >4GB VRAM,
-                // so only trust it when it lands in a plausible range.
-                const ramGB = gpu?.AdapterRAM ? gpu.AdapterRAM / 1e9 : 0;
-                if (gpu?.Name) {
-                    return {
+                const list = Array.isArray(parsed) ? parsed : [parsed];
+                const gpus: GpuInfo[] = [];
+                for (const gpu of list) {
+                    if (!gpu?.Name) continue;
+                    // AdapterRAM is a known-buggy 32-bit field on Windows for GPUs with >4GB VRAM,
+                    // so only trust it when it lands in a plausible range.
+                    const ramGB = gpu.AdapterRAM ? gpu.AdapterRAM / 1e9 : 0;
+                    gpus.push({
                         name: gpu.Name,
                         vramGB: ramGB > 0 && ramGB < 64 ? +ramGB.toFixed(1) : null,
                         vendor: "unknown",
-                    };
+                    });
                 }
+                if (gpus.length > 0) return gpus;
             } catch {
                 // ignore malformed output
             }
@@ -113,19 +129,26 @@ async function detectGpu(): Promise<GpuInfo | null> {
 
     if (os.platform() === "darwin") {
         const out = await execFileP("system_profiler", ["SPDisplaysDataType"]);
-        const nameMatch = out?.match(/Chipset Model:\s*(.+)/);
-        if (nameMatch) {
-            // Apple Silicon GPUs share unified memory with the CPU rather than dedicated VRAM.
-            return { name: nameMatch[1].trim(), vramGB: null, vendor: "apple" };
+        if (out) {
+            const gpus: GpuInfo[] = [];
+            // Apple Silicon GPUs share unified memory with the CPU rather than
+            // dedicated VRAM, so there's no per-GPU size to report here.
+            for (const match of out.matchAll(/Chipset Model:\s*(.+)/g)) {
+                gpus.push({ name: match[1].trim(), vramGB: null, vendor: "apple" });
+            }
+            if (gpus.length > 0) return gpus;
         }
     }
 
-    return null;
+    return [];
 }
 
 export async function getSpecs(): Promise<SystemSpecs> {
     const cpus = os.cpus() || [];
-    const gpu = await detectGpu();
+    const gpus = await detectGpus();
+    const knownVram = gpus.map((g) => g.vramGB).filter((v): v is number => v !== null);
+    const totalVramGB = knownVram.length > 0 ? +knownVram.reduce((a, b) => a + b, 0).toFixed(1) : null;
+
     return {
         totalRAMGB: +(os.totalmem() / 1e9).toFixed(1),
         freeRAMGB: +(os.freemem() / 1e9).toFixed(1),
@@ -133,14 +156,16 @@ export async function getSpecs(): Promise<SystemSpecs> {
         cpuCores: cpus.length,
         platform: os.platform(),
         arch: os.arch(),
-        gpu,
+        gpu: gpus[0] ?? null,
+        gpus,
+        totalVramGB,
     };
 }
 
 export function recommendModels(specs: SystemSpecs): ModelRecommendations {
     // Leave headroom for the OS and the app itself on both RAM and VRAM.
     const usableRAMGB = +(specs.totalRAMGB * 0.7).toFixed(1);
-    const usableVRAMGB = specs.gpu?.vramGB ? +(specs.gpu.vramGB * 0.9).toFixed(1) : 0;
+    const usableVRAMGB = specs.totalVramGB ? +(specs.totalVramGB * 0.9).toFixed(1) : 0;
     const effectiveGB = Math.max(usableRAMGB, usableVRAMGB);
 
     const fitting = MODEL_CATALOG.filter((m) => m.minRAMGB <= effectiveGB);

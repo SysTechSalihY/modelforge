@@ -272,6 +272,22 @@ function ProjectGroup({
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">{t.gpuLayers}</label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        step={1}
+                                        placeholder={t.gpuLayersAuto}
+                                        value={params.gpuLayers ?? ""}
+                                        onChange={(e) =>
+                                            updateParam({ gpuLayers: e.target.value === "" ? undefined : Number(e.target.value) })
+                                        }
+                                        aria-label={t.gpuLayers}
+                                        title={t.gpuLayersHelp}
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
                                     <label className="text-xs text-muted-foreground">{t.frequencyPenalty}</label>
                                     <Input
                                         type="number"

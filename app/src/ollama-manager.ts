@@ -231,6 +231,7 @@ export async function chat(
                     frequency_penalty: options?.frequencyPenalty,
                     presence_penalty: options?.presencePenalty,
                     num_ctx: options?.contextLength,
+                    num_gpu: options?.gpuLayers,
                 },
             }),
             signal,

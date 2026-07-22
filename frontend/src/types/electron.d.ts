@@ -58,6 +58,8 @@ export interface SystemSpecs {
   platform: string;
   arch: string;
   gpu: GpuInfo | null;
+  gpus: GpuInfo[];
+  totalVramGB: number | null;
 }
 
 export interface RecommendedModel {
@@ -94,6 +96,7 @@ export interface AppSettings {
   frequencyPenalty: number;
   presencePenalty: number;
   contextLength: number;
+  gpuLayers?: number;
   systemPrompt: string;
   promptPresets: PromptPreset[];
   theme: "light" | "dark" | "system";
@@ -107,6 +110,7 @@ export interface ChatOptions {
   frequencyPenalty?: number;
   presencePenalty?: number;
   contextLength?: number;
+  gpuLayers?: number;
 }
 
 export interface OllamaStartResult {

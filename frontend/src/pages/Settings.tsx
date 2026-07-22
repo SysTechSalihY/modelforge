@@ -36,6 +36,16 @@ import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/translations";
 
+// Ollama pulls Hugging Face GGUF models via a "hf.co/user/repo[:quant]" model
+// name — accept a pasted full URL or the "huggingface.co/" host too, rather
+// than making the user hand-edit what they copied from their browser.
+function normalizeModelTag(input: string): string {
+    return input
+        .trim()
+        .replace(/^https?:\/\//i, "")
+        .replace(/^huggingface\.co\//i, "hf.co/");
+}
+
 function formatBytes(bytes: number) {
     return `${(bytes / 1e9).toFixed(1)} GB`;
 }
@@ -312,13 +322,27 @@ export default function Settings() {
                                         {specs.platform} / {specs.arch}
                                     </span>
                                 </SettingsRow>
-                                <SettingsRow label="GPU">
-                                    <span className="text-sm text-muted-foreground">
-                                        {specs.gpu
-                                            ? `${specs.gpu.name}${specs.gpu.vramGB ? ` (${specs.gpu.vramGB} GB VRAM)` : ""}`
-                                            : "No dedicated GPU detected"}
-                                    </span>
-                                </SettingsRow>
+                                {specs.gpus.length > 0 ? (
+                                    specs.gpus.map((gpu, i) => (
+                                        <SettingsRow key={i} label={specs.gpus.length > 1 ? `GPU ${i + 1}` : "GPU"}>
+                                            <span className="text-sm text-muted-foreground">
+                                                {gpu.name}
+                                                {gpu.vramGB ? ` (${gpu.vramGB} GB VRAM)` : ""}
+                                            </span>
+                                        </SettingsRow>
+                                    ))
+                                ) : (
+                                    <SettingsRow label="GPU">
+                                        <span className="text-sm text-muted-foreground">No dedicated GPU detected</span>
+                                    </SettingsRow>
+                                )}
+                                {specs.gpus.length > 1 && specs.totalVramGB !== null && (
+                                    <SettingsRow label="Total VRAM">
+                                        <span className="text-sm text-muted-foreground">
+                                            {specs.totalVramGB} GB across {specs.gpus.length} GPUs
+                                        </span>
+                                    </SettingsRow>
+                                )}
                             </SettingsSection>
                         )}
 
@@ -384,11 +408,14 @@ export default function Settings() {
                                     <Input
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search any model, e.g. codellama:13b, mixtral:8x7b..."
+                                        placeholder="Search catalog, an exact tag (mixtral:8x7b), or a Hugging Face model (hf.co/user/repo)..."
                                         aria-label="Search models"
                                         className="pl-8"
                                     />
                                 </div>
+                                <p className="mt-1.5 px-1 text-xs text-muted-foreground">
+                                    {t.huggingFaceHint}
+                                </p>
                             </div>
 
                             {search.trim()
@@ -476,27 +503,31 @@ export default function Settings() {
                                       );
                                   })}
 
-                            {search.trim() && !exactMatchExists && !installedNames.has(search.trim()) && (
-                                <SettingsRow
-                                    label={search.trim()}
-                                    description="Not in the catalog — pull this exact model tag from Ollama's library."
-                                >
-                                    {pulling[search.trim()] !== undefined ? (
-                                        <Button size="icon" variant="outline" disabled aria-label={`Downloading ${search.trim()}`}>
-                                            <Loader2 className="animate-spin" />
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            onClick={() => pullModel(search.trim())}
-                                            aria-label={`Download ${search.trim()}`}
-                                        >
-                                            <Download />
-                                        </Button>
-                                    )}
-                                </SettingsRow>
-                            )}
+                            {search.trim() && !exactMatchExists && !installedNames.has(search.trim()) && (() => {
+                                const customTag = normalizeModelTag(search);
+                                const isHuggingFace = /^hf\.co\//i.test(customTag);
+                                return (
+                                    <SettingsRow
+                                        label={customTag}
+                                        description={isHuggingFace ? t.pullFromHuggingFace : t.pullExactTag}
+                                    >
+                                        {pulling[customTag] !== undefined ? (
+                                            <Button size="icon" variant="outline" disabled aria-label={`Downloading ${customTag}`}>
+                                                <Loader2 className="animate-spin" />
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                onClick={() => pullModel(customTag)}
+                                                aria-label={`Download ${customTag}`}
+                                            >
+                                                <Download />
+                                            </Button>
+                                        )}
+                                    </SettingsRow>
+                                );
+                            })()}
                         </SettingsSection>
 
                         {otherInstalled.length > 0 && (
@@ -604,6 +635,21 @@ export default function Settings() {
                                                     step={512}
                                                     value={settings.contextLength}
                                                     onChange={(e) => saveSettings({ contextLength: Number(e.target.value) })}
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <label htmlFor="setting-gpuLayers" className="text-xs text-muted-foreground">{t.gpuLayers}</label>
+                                                <Input
+                                                    id="setting-gpuLayers"
+                                                    type="number"
+                                                    min={0}
+                                                    step={1}
+                                                    placeholder={t.gpuLayersAuto}
+                                                    title={t.gpuLayersHelp}
+                                                    value={settings.gpuLayers ?? ""}
+                                                    onChange={(e) =>
+                                                        saveSettings({ gpuLayers: e.target.value === "" ? undefined : Number(e.target.value) })
+                                                    }
                                                 />
                                             </div>
                                             <div className="flex flex-col gap-1">

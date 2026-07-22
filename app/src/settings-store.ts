@@ -17,6 +17,8 @@ export interface AppSettings {
     frequencyPenalty: number;
     presencePenalty: number;
     contextLength: number;
+    // undefined = auto (let Ollama decide how many layers to offload to GPU).
+    gpuLayers?: number;
     systemPrompt: string;
     promptPresets: PromptPreset[];
     theme: "light" | "dark" | "system";

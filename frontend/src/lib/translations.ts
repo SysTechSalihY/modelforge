@@ -15,6 +15,9 @@ export interface Dictionary {
     attachFiles: string;
     attachProjectFolder: string;
     noOllamaModelsInstalled: string;
+    huggingFaceHint: string;
+    pullFromHuggingFace: string;
+    pullExactTag: string;
     agentMode: string;
     agentModeTooltip: string;
     changeFolder: string;
@@ -46,6 +49,9 @@ export interface Dictionary {
     topP: string;
     maxTokens: string;
     contextLength: string;
+    gpuLayers: string;
+    gpuLayersAuto: string;
+    gpuLayersHelp: string;
     contextLengthOllamaOnly: string;
     frequencyPenalty: string;
     presencePenalty: string;
@@ -98,6 +104,9 @@ export const en: Dictionary = {
     attachFiles: "Attach files",
     attachProjectFolder: "Attach project folder",
     noOllamaModelsInstalled: "No Ollama models installed — go to Settings to install one.",
+    huggingFaceHint: "Tip: paste any GGUF model's Hugging Face URL (or hf.co/user/repo) to pull it directly — you're not limited to the catalog above.",
+    pullFromHuggingFace: "Pull this GGUF model directly from Hugging Face.",
+    pullExactTag: "Not in the catalog — pull this exact model tag from Ollama's library.",
     agentMode: "Agent",
     agentModeTooltip: "Agent mode: gives the model file tools (read/write/list/search) and shell command execution, scoped to a folder you choose. Every tool call needs your approval.",
     changeFolder: "Change folder",
@@ -130,6 +139,9 @@ export const en: Dictionary = {
     topP: "Top P",
     maxTokens: "Max tokens",
     contextLength: "Context length",
+    gpuLayers: "GPU layers",
+    gpuLayersAuto: "Auto",
+    gpuLayersHelp: "How many model layers to offload to the GPU (Ollama's num_gpu). Leave blank to let Ollama decide automatically; 0 forces CPU-only.",
     contextLengthOllamaOnly: " (Ollama only)",
     frequencyPenalty: "Frequency penalty",
     presencePenalty: "Presence penalty",
@@ -183,6 +195,9 @@ export const tr: Dictionary = {
     attachFiles: "Dosya ekle",
     attachProjectFolder: "Proje klasörü ekle",
     noOllamaModelsInstalled: "Yüklü Ollama modeli yok — birini yüklemek için Ayarlar'a gidin.",
+    huggingFaceHint: "İpucu: herhangi bir GGUF modelinin Hugging Face bağlantısını (veya hf.co/kullanıcı/depo) yapıştırarak doğrudan indirebilirsiniz — yukarıdaki katalogla sınırlı değilsiniz.",
+    pullFromHuggingFace: "Bu GGUF modelini doğrudan Hugging Face'ten indir.",
+    pullExactTag: "Katalogda yok — bu tam model etiketini Ollama kütüphanesinden indirin.",
     agentMode: "Ajan",
     agentModeTooltip: "Ajan modu: modele seçtiğiniz bir klasörle sınırlı dosya araçları (okuma/yazma/listeleme/arama) ve kabuk komutu çalıştırma verir. Her araç çağrısı onayınızı gerektirir.",
     changeFolder: "Klasörü değiştir",
@@ -216,6 +231,9 @@ export const tr: Dictionary = {
     topP: "Top P",
     maxTokens: "Maksimum token",
     contextLength: "Bağlam uzunluğu",
+    gpuLayers: "GPU katmanları",
+    gpuLayersAuto: "Otomatik",
+    gpuLayersHelp: "GPU'ya kaç model katmanının aktarılacağı (Ollama'nın num_gpu ayarı). Ollama'nın otomatik karar vermesi için boş bırakın; 0 sadece CPU kullanımını zorlar.",
     contextLengthOllamaOnly: " (yalnızca Ollama)",
     frequencyPenalty: "Sıklık cezası",
     presencePenalty: "Varlık cezası",

@@ -506,6 +506,7 @@ export default function Chat() {
                 params.frequencyPenalty ?? project?.params?.frequencyPenalty ?? settings?.frequencyPenalty,
             presencePenalty: params.presencePenalty ?? project?.params?.presencePenalty ?? settings?.presencePenalty,
             contextLength: params.contextLength ?? project?.params?.contextLength ?? settings?.contextLength,
+            gpuLayers: params.gpuLayers ?? project?.params?.gpuLayers ?? settings?.gpuLayers,
         };
     }
 
@@ -1022,6 +1023,25 @@ export default function Chat() {
                                     step={512}
                                     value={params.contextLength ?? currentProject?.params?.contextLength ?? settings?.contextLength ?? ""}
                                     onChange={(e) => updateParam({ contextLength: Number(e.target.value) })}
+                                    disabled={parsedModel?.provider !== "ollama"}
+                                    className="h-8 text-xs"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-xs text-muted-foreground">
+                                    {t.gpuLayers}
+                                    {parsedModel?.provider !== "ollama" ? " (Ollama only)" : ""}
+                                </label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    placeholder={t.gpuLayersAuto}
+                                    title={t.gpuLayersHelp}
+                                    value={params.gpuLayers ?? currentProject?.params?.gpuLayers ?? settings?.gpuLayers ?? ""}
+                                    onChange={(e) =>
+                                        updateParam({ gpuLayers: e.target.value === "" ? undefined : Number(e.target.value) })
+                                    }
                                     disabled={parsedModel?.provider !== "ollama"}
                                     className="h-8 text-xs"
                                 />

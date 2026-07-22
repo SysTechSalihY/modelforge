@@ -43,6 +43,12 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 
 **Agent mode** — see the [dedicated section](#agent-mode) below.
 
+**Models & hardware**
+- Model recommendations based on your actual hardware — RAM and VRAM are detected and summed **across all GPUs**, not just the first one, so multi-GPU machines get accurate suggestions.
+- **GPU offload control** — set how many model layers Ollama offloads to GPU (`num_gpu`) per chat, per project, or as a global default; leave it blank to let Ollama decide automatically.
+- **Pull models directly from Hugging Face** — paste any GGUF model's Hugging Face URL (or `hf.co/user/repo`) into the model search box alongside the curated catalog and Ollama's own library.
+- Models with reliable tool/function-calling support are flagged with a 🔧 badge, so picking a good Agent mode model doesn't require guesswork.
+
 **Customization & control**
 - English and Turkish UI localization.
 - Configurable Ollama host — point at a remote server instead of localhost.

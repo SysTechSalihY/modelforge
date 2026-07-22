@@ -56,6 +56,11 @@ export interface ChatOptions {
     // Ollama-only: how much conversation history the model actually processes
     // (num_ctx). Cloud providers fix this per-model and don't expose it via API.
     contextLength?: number;
+    // Ollama-only: how many model layers to offload to GPU (num_gpu).
+    // undefined = let Ollama auto-decide, 0 = force CPU-only, a positive
+    // number = offload that many layers (useful for tuning multi-GPU setups
+    // or freeing VRAM for something else running alongside Ollama).
+    gpuLayers?: number;
 }
 
 export type ChatFn = (
