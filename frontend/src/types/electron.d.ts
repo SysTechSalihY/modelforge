@@ -253,6 +253,7 @@ export interface ElectronApi {
   app: {
     setBusy: (busy: boolean) => Promise<void>;
     getVersion: () => Promise<string>;
+    checkForUpdates: () => Promise<void>;
     getDiagnostics: () => Promise<{
       appVersion: string;
       electron: string;

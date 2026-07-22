@@ -90,7 +90,15 @@ export interface Dictionary {
     copyDiagnosticInfo: string;
     copied: string;
     openLogsFolder: string;
+    checkForUpdates: string;
     language: string;
+    appearance: string;
+    colorMode: string;
+    colorModeLight: string;
+    colorModeDark: string;
+    colorModeSystem: string;
+    accentColor: string;
+    accentColorNames: { default: string; blue: string; green: string; purple: string; orange: string; rose: string };
     general: string;
     providers: string;
     models: string;
@@ -191,7 +199,22 @@ export const en: Dictionary = {
     copyDiagnosticInfo: "Copy diagnostic info",
     copied: "Copied",
     openLogsFolder: "Open logs folder",
+    checkForUpdates: "Check for updates",
     language: "Language",
+    appearance: "Appearance",
+    colorMode: "Color mode",
+    colorModeLight: "Light",
+    colorModeDark: "Dark",
+    colorModeSystem: "System",
+    accentColor: "Accent color",
+    accentColorNames: {
+        default: "Default (gray)",
+        blue: "Blue",
+        green: "Green",
+        purple: "Purple",
+        orange: "Orange",
+        rose: "Rose",
+    },
     general: "General",
     providers: "Providers",
     models: "Models",
@@ -293,7 +316,22 @@ export const tr: Dictionary = {
     copyDiagnosticInfo: "Tanılama bilgisini kopyala",
     copied: "Kopyalandı",
     openLogsFolder: "Günlük klasörünü aç",
+    checkForUpdates: "Güncellemeleri denetle",
     language: "Dil",
+    appearance: "Görünüm",
+    colorMode: "Renk modu",
+    colorModeLight: "Açık",
+    colorModeDark: "Koyu",
+    colorModeSystem: "Sistem",
+    accentColor: "Vurgu rengi",
+    accentColorNames: {
+        default: "Varsayılan (gri)",
+        blue: "Mavi",
+        green: "Yeşil",
+        purple: "Mor",
+        orange: "Turuncu",
+        rose: "Gül kurusu",
+    },
     general: "Genel",
     providers: "Sağlayıcılar",
     models: "Modeller",

@@ -12,6 +12,7 @@ import {
     Settings2,
     Bug,
     Copy,
+    RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,8 @@ import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef } from "@/lib/providers
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/translations";
+import { useTheme, ACCENT_COLORS, type AccentColor } from "@/components/theme-provider";
+import { cn } from "@/lib/utils";
 
 // Ollama pulls Hugging Face GGUF models via a "hf.co/user/repo[:quant]" model
 // name — accept a pasted full URL or the "huggingface.co/" host too, rather
@@ -46,12 +49,25 @@ function normalizeModelTag(input: string): string {
         .replace(/^huggingface\.co\//i, "hf.co/");
 }
 
+// Static preview swatches for the accent color picker — independent of the
+// live CSS variables so the dot always shows the same recognizable hue
+// regardless of which theme is currently active.
+const ACCENT_SWATCHES: Record<AccentColor, string> = {
+    default: "oklch(0.556 0 0)",
+    blue: "oklch(0.55 0.2 260)",
+    green: "oklch(0.55 0.16 145)",
+    purple: "oklch(0.55 0.22 300)",
+    orange: "oklch(0.62 0.19 55)",
+    rose: "oklch(0.58 0.22 10)",
+};
+
 function formatBytes(bytes: number) {
     return `${(bytes / 1e9).toFixed(1)} GB`;
 }
 
 export default function Settings() {
     const { t, locale, setLocale } = useI18n();
+    const { theme, setTheme, accent, setAccent } = useTheme();
     const [running, setRunning] = useState<boolean | null>(null);
     const [specs, setSpecs] = useState<SystemSpecs | null>(null);
     const [recommendations, setRecommendations] = useState<ModelRecommendations | null>(null);
@@ -291,6 +307,44 @@ export default function Settings() {
                             </SettingsRow>
                         </SettingsSection>
 
+                        <SettingsSection title={t.appearance}>
+                            <SettingsRow label={t.colorMode}>
+                                <Select value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
+                                    <SelectTrigger size="sm" className="w-36">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="light">{t.colorModeLight}</SelectItem>
+                                        <SelectItem value="dark">{t.colorModeDark}</SelectItem>
+                                        <SelectItem value="system">{t.colorModeSystem}</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </SettingsRow>
+                            <SettingsRow label={t.accentColor} stacked>
+                                <div className="flex flex-wrap gap-2">
+                                    {ACCENT_COLORS.map((c) => (
+                                        <button
+                                            key={c}
+                                            type="button"
+                                            onClick={() => setAccent(c)}
+                                            aria-label={t.accentColorNames[c]}
+                                            aria-pressed={accent === c}
+                                            title={t.accentColorNames[c]}
+                                            className={cn(
+                                                "flex size-8 items-center justify-center rounded-full border-2 transition-colors",
+                                                accent === c ? "border-foreground" : "border-transparent"
+                                            )}
+                                        >
+                                            <span
+                                                className="size-6 rounded-full"
+                                                style={{ backgroundColor: ACCENT_SWATCHES[c] }}
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+                            </SettingsRow>
+                        </SettingsSection>
+
                         <SettingsSection title={t.language}>
                             <SettingsRow label={t.language}>
                                 <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
@@ -346,9 +400,14 @@ export default function Settings() {
                             </SettingsSection>
                         )}
 
-                        <p className="text-center text-xs text-muted-foreground">
-                            {t.appName}{appVersion ? ` v${appVersion}` : ""}
-                        </p>
+                        <div className="flex flex-col items-center gap-1.5">
+                            <p className="text-center text-xs text-muted-foreground">
+                                {t.appName}{appVersion ? ` v${appVersion}` : ""}
+                            </p>
+                            <Button size="sm" variant="outline" onClick={() => window.api.app.checkForUpdates()} className="gap-1.5">
+                                <RefreshCw className="size-3.5" /> {t.checkForUpdates}
+                            </Button>
+                        </div>
                     </div>
 
                     <div>

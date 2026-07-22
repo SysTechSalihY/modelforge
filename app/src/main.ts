@@ -279,6 +279,7 @@ function registerIpcHandlers(): void {
         isBusy = busy;
     });
     ipcMain.handle("app:getVersion", () => app.getVersion());
+    ipcMain.handle("app:checkForUpdates", () => checkForUpdatesManually(() => mainWindow));
     ipcMain.handle("app:getDiagnostics", async () => ({
         appVersion: app.getVersion(),
         electron: process.versions.electron,

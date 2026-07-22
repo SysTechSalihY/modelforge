@@ -51,9 +51,10 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 
 **Customization & control**
 - English and Turkish UI localization.
+- **Theming** — light/dark/system color mode plus a choice of accent colors (default gray, blue, green, purple, orange, rose), in Settings → Appearance.
 - Configurable Ollama host — point at a remote server instead of localhost.
 - Data export/import, and one-click "copy diagnostic info" for bug reports.
-- Auto-updates: packaged builds check GitHub Releases for new versions.
+- **Updates** — packaged builds check GitHub Releases for new versions automatically on launch, plus a manual "Check for updates" button in Settings (also available from the app menu).
 
 ## Screenshots
 
