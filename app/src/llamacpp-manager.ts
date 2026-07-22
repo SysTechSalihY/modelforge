@@ -1,10 +1,31 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getLlama, getLlamaGpuTypes, LlamaChatSession, type Llama, type LlamaModel } from "node-llama-cpp";
-import type { ChatHistoryItem } from "node-llama-cpp";
+// node-llama-cpp is ESM with top-level await — this app compiles to
+// CommonJS, and `require()`-ing an ESM module with top-level await throws
+// (ERR_REQUIRE_ASYNC_MODULE) instead of loading. A plain dynamic `import()`
+// doesn't dodge this: TypeScript's CommonJS output rewrites `import(x)` into
+// `Promise.resolve().then(() => require(x))`, which just wraps the same
+// broken require() in a promise. The only way to get Node's *real* dynamic
+// import from CJS output is to hide the `import()` call from TypeScript's
+// transform entirely — building it via `new Function` does that, since tsc
+// can't statically see (or rewrite) an import expression inside a string.
+// Type-only imports are erased at compile time and don't hit this problem,
+// so those stay static.
+import type { ChatHistoryItem, Llama, LlamaModel } from "node-llama-cpp";
 import type { ChatMessage, ChatChunk, ChatOptions, ToolDefinition } from "./providers/types";
 
 export type GpuBackend = "auto" | "vulkan" | "cuda" | "metal" | "cpu";
+
+type NodeLlamaCppModule = typeof import("node-llama-cpp");
+const dynamicImport = new Function("specifier", "return import(specifier)") as (
+    specifier: string
+) => Promise<NodeLlamaCppModule>;
+let modulePromise: Promise<NodeLlamaCppModule> | null = null;
+
+function loadNodeLlamaCpp(): Promise<NodeLlamaCppModule> {
+    if (!modulePromise) modulePromise = dynamicImport("node-llama-cpp");
+    return modulePromise;
+}
 
 let llamaInstance: Llama | null = null;
 let activeBackend: GpuBackend = "auto";
@@ -25,6 +46,7 @@ export function setGpuBackend(backend: GpuBackend): void {
 
 async function getLlamaInstance(): Promise<Llama> {
     if (!llamaInstance) {
+        const { getLlama } = await loadNodeLlamaCpp();
         llamaInstance = await getLlama({ gpu: activeBackend === "cpu" ? false : activeBackend });
     }
     return llamaInstance;
@@ -32,6 +54,7 @@ async function getLlamaInstance(): Promise<Llama> {
 
 export async function getAvailableGpuBackends(): Promise<string[]> {
     try {
+        const { getLlamaGpuTypes } = await loadNodeLlamaCpp();
         const types = await getLlamaGpuTypes("supported");
         return types.filter((t): t is Exclude<typeof t, false> => t !== false);
     } catch {
@@ -122,6 +145,7 @@ export async function chat(
     // across turns of the same conversation) would fix that but needs a
     // stable conversation identity to key off of, which isn't threaded
     // through this call today.
+    const { LlamaChatSession } = await loadNodeLlamaCpp();
     const context = await model.createContext({ contextSize: options?.contextLength });
     try {
         const sequence = context.getSequence();
