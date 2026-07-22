@@ -121,6 +121,12 @@ export interface Dictionary {
     modelsDirApplied: string;
     modelsDirFailed: string;
     modelsDirExternalWarning: string;
+    analyzeAs: string;
+    analyzeDescribeUI: string;
+    analyzeToMermaid: string;
+    analyzeToCode: string;
+    analyzeListComponents: string;
+    analyzeFindIssues: string;
     resetToDefault: string;
     usingCustomPrompt: string;
     dataManagement: string;
@@ -280,6 +286,12 @@ export const en: Dictionary = {
     modelsDirApplied: "Applied — Ollama restarted with the new location.",
     modelsDirFailed: "Couldn't restart Ollama with the new location. Try starting it manually.",
     modelsDirExternalWarning: "Saved, but Ollama is running outside this app — restart it manually (with OLLAMA_MODELS set to this folder) for the change to take effect.",
+    analyzeAs: "Analyze as...",
+    analyzeDescribeUI: "Describe UI/wireframe",
+    analyzeToMermaid: "Convert to Mermaid diagram",
+    analyzeToCode: "Convert to React + Tailwind code",
+    analyzeListComponents: "List UI components",
+    analyzeFindIssues: "Find usability/accessibility issues",
     resetToDefault: "Reset to default",
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
@@ -447,6 +459,12 @@ export const tr: Dictionary = {
     modelsDirApplied: "Uygulandı — Ollama yeni konumla yeniden başlatıldı.",
     modelsDirFailed: "Ollama yeni konumla yeniden başlatılamadı. Elle başlatmayı deneyin.",
     modelsDirExternalWarning: "Kaydedildi, ancak Ollama bu uygulamanın dışında çalışıyor — değişikliğin etkili olması için Ollama'yı bu klasör OLLAMA_MODELS olarak ayarlanmış şekilde elle yeniden başlatın.",
+    analyzeAs: "Şu şekilde analiz et...",
+    analyzeDescribeUI: "UI/wireframe'i betimle",
+    analyzeToMermaid: "Mermaid diyagramına dönüştür",
+    analyzeToCode: "React + Tailwind koduna dönüştür",
+    analyzeListComponents: "UI bileşenlerini listele",
+    analyzeFindIssues: "Kullanılabilirlik/erişilebilirlik sorunlarını bul",
     resetToDefault: "Varsayılana dön",
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",

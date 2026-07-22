@@ -90,6 +90,42 @@ const RAG_THRESHOLD_CHARS = 20_000;
 // click each time — write_file and run_command always require explicit
 // per-call approval since they have real, potentially irreversible effects.
 const READ_ONLY_TOOLS = new Set(["read_file", "list_dir", "search_files"]);
+
+// Vision models can already reason over any attached image — these just save
+// re-typing a good prompt for the common "I attached a diagram/wireframe"
+// case. Selecting one fills the composer; the user can still edit before sending.
+interface DiagramPromptPreset {
+    id: string;
+    labelKey: "analyzeDescribeUI" | "analyzeToMermaid" | "analyzeToCode" | "analyzeListComponents" | "analyzeFindIssues";
+    prompt: string;
+}
+const DIAGRAM_PROMPT_PRESETS: DiagramPromptPreset[] = [
+    {
+        id: "describe",
+        labelKey: "analyzeDescribeUI",
+        prompt: "Describe this UI/wireframe in detail: overall layout, every visible component, and how they're organized/hierarchical.",
+    },
+    {
+        id: "mermaid",
+        labelKey: "analyzeToMermaid",
+        prompt: "Convert this diagram into a Mermaid diagram definition (pick whichever Mermaid diagram type — flowchart, sequence, class, etc. — best fits what's shown).",
+    },
+    {
+        id: "code",
+        labelKey: "analyzeToCode",
+        prompt: "Generate React + Tailwind CSS code that reproduces this UI mockup/wireframe as closely as possible.",
+    },
+    {
+        id: "components",
+        labelKey: "analyzeListComponents",
+        prompt: "List every distinct UI component visible in this image, grouped by type (buttons, inputs, navigation, cards, etc.).",
+    },
+    {
+        id: "issues",
+        labelKey: "analyzeFindIssues",
+        prompt: "Review this UI/wireframe for usability or accessibility issues and suggest concrete improvements.",
+    },
+];
 // Caps how many automatic tool-result -> model-continuation round trips can
 // happen for a single user turn, so a model that keeps calling tools without
 // ever producing a final answer can't loop indefinitely.
@@ -549,6 +585,11 @@ export default function Chat() {
 
     function removeImageAttachment(path: string) {
         setImageAttachments((prev) => prev.filter((f) => f.path !== path));
+    }
+
+    function applyDiagramPreset(prompt: string) {
+        setInput(prompt);
+        textareaRef.current?.focus();
     }
 
     async function handleAttachFolder() {
@@ -1528,6 +1569,25 @@ export default function Chat() {
                                     </button>
                                 </div>
                             ))}
+                            {imageAttachments.length > 0 && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                        render={
+                                            <button className="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted">
+                                                <Sparkles className="size-3" />
+                                                {t.analyzeAs}
+                                            </button>
+                                        }
+                                    />
+                                    <DropdownMenuContent>
+                                        {DIAGRAM_PROMPT_PRESETS.map((preset) => (
+                                            <DropdownMenuItem key={preset.id} onClick={() => applyDiagramPreset(preset.prompt)}>
+                                                {t[preset.labelKey]}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
                             {indexingFolder && (
                                 <div className="flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                                     <Loader2 className="size-3 animate-spin" />

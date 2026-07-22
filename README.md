@@ -28,7 +28,7 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 
 **Chat & providers**
 - Local Ollama models, OpenAI, and Anthropic in one interface, with token-by-token streaming.
-- Vision support — attach images (or extract frames from a video) for models that can see them.
+- Vision support — attach images (or extract frames from a video) for models that can see them. When an image is attached, an **"Analyze as..."** menu fills the composer with a ready-made prompt for common diagram/wireframe tasks — describe the UI, convert it to a Mermaid diagram, generate React + Tailwind code from it, list its components, or review it for usability/accessibility issues.
 - Live token usage and estimated cost per message and per session (Ollama is free/local; cloud providers show a running estimate).
 
 **Organization**
