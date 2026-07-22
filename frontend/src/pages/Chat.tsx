@@ -26,6 +26,9 @@ import {
     FlaskConical,
     Wand2,
     Wrench,
+    MonitorSmartphone,
+    Frame,
+    ScanText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +58,7 @@ import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef, parseModelRef } from "
 import { estimateCost, formatCost } from "@/lib/pricing";
 import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
 import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
+import { ScreenshotPickerDialog } from "@/components/screenshot-picker-dialog";
 import { speakText, stopSpeaking } from "@/lib/tts";
 import { computeLineDiff } from "@/lib/diff";
 import type {
@@ -322,6 +326,14 @@ export default function Chat() {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [ragFolders, setRagFolders] = useState<RagFolder[]>([]);
     const [imageAttachments, setImageAttachments] = useState<ImageAttachment[]>([]);
+    const [showScreenshotPicker, setShowScreenshotPicker] = useState(false);
+    const [screenshotError, setScreenshotError] = useState<string | null>(null);
+    const [showFigmaInput, setShowFigmaInput] = useState(false);
+    const [figmaUrlInput, setFigmaUrlInput] = useState("");
+    const [figmaFetching, setFigmaFetching] = useState(false);
+    const [figmaError, setFigmaError] = useState<string | null>(null);
+    const [ocrRunningPath, setOcrRunningPath] = useState<string | null>(null);
+    const [ocrError, setOcrError] = useState<string | null>(null);
     const [indexingFolder, setIndexingFolder] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
     const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
@@ -587,9 +599,67 @@ export default function Chat() {
         setImageAttachments((prev) => prev.filter((f) => f.path !== path));
     }
 
+    async function runOcr(img: ImageAttachment) {
+        if (ocrRunningPath) return;
+        setOcrRunningPath(img.path);
+        setOcrError(null);
+        const res = await window.api.ocr.recognize(img.dataBase64);
+        if (res.error || res.text === undefined) {
+            setOcrError(res.error ?? "OCR failed.");
+            setTimeout(() => setOcrError(null), 6000);
+        } else if (!res.text) {
+            setOcrError(t.ocrNoTextFound);
+            setTimeout(() => setOcrError(null), 6000);
+        } else {
+            setInput((prev) => (prev ? `${prev}\n\n${res.text}` : res.text!));
+            textareaRef.current?.focus();
+        }
+        setOcrRunningPath(null);
+    }
+
     function applyDiagramPreset(prompt: string) {
         setInput(prompt);
         textareaRef.current?.focus();
+    }
+
+    async function captureScreenshot(sourceId: string) {
+        setScreenshotError(null);
+        const res = await window.api.screen.capture(sourceId);
+        if (res.error || !res.dataBase64) {
+            setScreenshotError(res.error ?? "Screenshot capture failed.");
+            setTimeout(() => setScreenshotError(null), 5000);
+            return;
+        }
+        const path = `screenshot-${Date.now()}`;
+        setImageAttachments((prev) => [
+            ...prev,
+            { kind: "image", name: "Screenshot.png", path, mimeType: res.mimeType ?? "image/png", dataBase64: res.dataBase64! },
+        ]);
+    }
+
+    async function fetchFigmaFrame() {
+        const url = figmaUrlInput.trim();
+        if (!url || figmaFetching) return;
+        setFigmaFetching(true);
+        setFigmaError(null);
+        const res = await window.api.figma.fetchFrame(url);
+        if (res.error || !res.result) {
+            setFigmaError(res.error ?? "Failed to fetch that Figma frame.");
+        } else {
+            setImageAttachments((prev) => [
+                ...prev,
+                {
+                    kind: "image",
+                    name: res.result!.name,
+                    path: `figma-${Date.now()}`,
+                    mimeType: res.result!.mimeType,
+                    dataBase64: res.result!.dataBase64,
+                },
+            ]);
+            setFigmaUrlInput("");
+            setShowFigmaInput(false);
+        }
+        setFigmaFetching(false);
     }
 
     async function handleAttachFolder() {
@@ -1561,6 +1631,19 @@ export default function Chat() {
                                     />
                                     <span className="max-w-[140px] truncate">{img.name}</span>
                                     <button
+                                        onClick={() => runOcr(img)}
+                                        disabled={ocrRunningPath === img.path}
+                                        className="text-muted-foreground hover:text-foreground"
+                                        aria-label={`${t.extractTextOcr} ${img.name}`}
+                                        title={t.extractTextOcr}
+                                    >
+                                        {ocrRunningPath === img.path ? (
+                                            <Loader2 className="size-3 animate-spin" />
+                                        ) : (
+                                            <ScanText className="size-3" />
+                                        )}
+                                    </button>
+                                    <button
                                         onClick={() => removeImageAttachment(img.path)}
                                         className="text-muted-foreground hover:text-destructive"
                                         aria-label={`Remove ${img.name}`}
@@ -1652,6 +1735,11 @@ export default function Chat() {
                     {voiceError && (
                         <p className="mb-1.5 text-xs text-destructive">{voiceError}</p>
                     )}
+                    {screenshotError && (
+                        <p className="mb-1.5 text-xs text-destructive">{screenshotError}</p>
+                    )}
+                    {figmaError && <p className="mb-1.5 text-xs text-destructive">{figmaError}</p>}
+                    {ocrError && <p className="mb-1.5 text-xs text-destructive">{ocrError}</p>}
                     <div className="flex items-end gap-2">
                         <DropdownMenu>
                             <DropdownMenuTrigger
@@ -1677,8 +1765,37 @@ export default function Chat() {
                                 <DropdownMenuItem onClick={handleAttachMedia}>
                                     <ImageIcon className="mr-1" /> Attach photo, video, or PDF
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setShowScreenshotPicker(true)}>
+                                    <MonitorSmartphone className="mr-1" /> {t.captureScreenshot}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setShowFigmaInput(true)}>
+                                    <Frame className="mr-1" /> {t.attachFigmaFrame}
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        <ScreenshotPickerDialog
+                            open={showScreenshotPicker}
+                            onOpenChange={setShowScreenshotPicker}
+                            onCapture={captureScreenshot}
+                        />
+                        {showFigmaInput && (
+                            <div className="flex items-center gap-1.5">
+                                <Input
+                                    autoFocus
+                                    value={figmaUrlInput}
+                                    onChange={(e) => setFigmaUrlInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && fetchFigmaFrame()}
+                                    placeholder={t.figmaUrlPlaceholder}
+                                    className="h-9 w-64 text-xs"
+                                />
+                                <Button size="sm" variant="outline" disabled={figmaFetching} onClick={fetchFigmaFrame}>
+                                    {figmaFetching ? <Loader2 className="size-3.5 animate-spin" /> : t.figmaFetch}
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setShowFigmaInput(false)}>
+                                    {t.cancel}
+                                </Button>
+                            </div>
+                        )}
                         {isTranscribing ? (
                             <Button size="icon" variant="outline" disabled className="rounded-xl" aria-label={t.transcribing}>
                                 <Loader2 className="animate-spin" />

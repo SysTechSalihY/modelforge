@@ -105,6 +105,8 @@ export default function Settings() {
     const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
     const [openaiKeySet, setOpenaiKeySet] = useState(false);
     const [anthropicKeySet, setAnthropicKeySet] = useState(false);
+    const [figmaTokenInput, setFigmaTokenInput] = useState("");
+    const [figmaTokenSet, setFigmaTokenSet] = useState(false);
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
@@ -113,6 +115,7 @@ export default function Settings() {
     const [modelsDirStatus, setModelsDirStatus] = useState<string | null>(null);
     const [changingModelsDir, setChangingModelsDir] = useState(false);
     const [newPresetName, setNewPresetName] = useState("");
+    const [importPresetsMessage, setImportPresetsMessage] = useState<string | null>(null);
     const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
     const [editDraftName, setEditDraftName] = useState("");
     const [editDraftPrompt, setEditDraftPrompt] = useState("");
@@ -149,6 +152,7 @@ export default function Settings() {
         });
         window.api.secrets.has("openai_api_key").then(setOpenaiKeySet);
         window.api.secrets.has("anthropic_api_key").then(setAnthropicKeySet);
+        window.api.secrets.has("figma_token").then(setFigmaTokenSet);
         window.api.app.getVersion().then(setAppVersion);
         window.api.data.getUserDataPath().then(setUserDataPath);
         refreshInstalled();
@@ -202,6 +206,12 @@ export default function Settings() {
         await window.api.secrets.set("anthropic_api_key", anthropicKeyInput.trim());
         setAnthropicKeySet(!!anthropicKeyInput.trim());
         setAnthropicKeyInput("");
+    }
+
+    async function saveFigmaToken() {
+        await window.api.secrets.set("figma_token", figmaTokenInput.trim());
+        setFigmaTokenSet(!!figmaTokenInput.trim());
+        setFigmaTokenInput("");
     }
 
     async function saveOllamaHost() {
@@ -421,6 +431,24 @@ export default function Settings() {
     function deletePreset(id: string) {
         if (!settings) return;
         saveSettings({ promptPresets: settings.promptPresets.filter((p) => p.id !== id) });
+    }
+
+    async function exportPresets() {
+        if (!settings) return;
+        await window.api.data.exportPromptPresets(settings.promptPresets);
+    }
+
+    async function importPresets() {
+        if (!settings) return;
+        const imported = await window.api.data.importPromptPresets();
+        if (imported.length === 0) {
+            setImportPresetsMessage(t.noPromptsImported);
+        } else {
+            const updated = await window.api.settings.save({ promptPresets: [...settings.promptPresets, ...imported] });
+            setSettings(updated);
+            setImportPresetsMessage(`${t.importedPromptsCount} ${imported.length}`);
+        }
+        setTimeout(() => setImportPresetsMessage(null), 4000);
     }
 
     const searchResults = useMemo(() => {
@@ -840,6 +868,31 @@ export default function Settings() {
                                         className="h-8 text-xs"
                                     />
                                     <Button size="sm" variant="outline" onClick={saveAnthropicKey} disabled={!anthropicKeyInput.trim()}>
+                                        {t.save}
+                                    </Button>
+                                </div>
+                            </SettingsRow>
+                        </SettingsSection>
+
+                        <SettingsSection title={t.integrations} description={t.figmaTokenHint} className="mt-8">
+                            <SettingsRow label="Figma" stacked>
+                                <div className="flex items-center gap-2">
+                                    {figmaTokenSet && (
+                                        <Badge variant="secondary">
+                                            <Check className="mr-1 size-3" /> Configured
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="flex gap-1.5">
+                                    <Input
+                                        type="password"
+                                        value={figmaTokenInput}
+                                        onChange={(e) => setFigmaTokenInput(e.target.value)}
+                                        placeholder={figmaTokenSet ? "Replace token..." : "figd_..."}
+                                        aria-label="Figma personal access token"
+                                        className="h-8 text-xs"
+                                    />
+                                    <Button size="sm" variant="outline" onClick={saveFigmaToken} disabled={!figmaTokenInput.trim()}>
                                         {t.save}
                                     </Button>
                                 </div>
@@ -1302,6 +1355,17 @@ export default function Settings() {
                                             </Button>
                                         </div>
                                     </SettingsRow>
+                                    <SettingsRow label={t.sharePrompts} description={t.sharePromptsHint}>
+                                        <Button size="sm" variant="outline" onClick={exportPresets} className="gap-1.5">
+                                            <FileDown className="size-3.5" /> {t.export}
+                                        </Button>
+                                        <Button size="sm" variant="outline" onClick={importPresets} className="gap-1.5">
+                                            <FileUp className="size-3.5" /> {t.import}
+                                        </Button>
+                                    </SettingsRow>
+                                    {importPresetsMessage && (
+                                        <p className="px-4 pb-3 text-xs text-muted-foreground">{importPresetsMessage}</p>
+                                    )}
                                 </SettingsSection>
                             </>
                         )}

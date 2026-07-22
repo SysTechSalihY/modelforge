@@ -40,6 +40,10 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 **Files & retrieval**
 - Attach files, folders, images, video, and PDFs directly into a conversation.
 - Large folders are automatically chunked, embedded (via Ollama), and retrieved by relevance instead of dumped whole into the prompt — so a big project doesn't blow out a small model's context window.
+- **Screenshot capture** — pick a screen or window from the Attach menu and it's captured and attached as an image, no separate screenshot tool needed. (macOS may require granting Screen Recording permission the first time.)
+- **OCR** — extract plain text from any attached image with one click, dropped straight into the composer. Runs fully offline via [tesseract.js](https://github.com/naptha/tesseract.js) after its first use (which needs network access once, to download the ~2MB English text-recognition model).
+- **Figma frame import** — add a personal access token in Settings → Integrations, then paste a "Copy link to selection" URL from Figma to fetch that frame as an image, attached like any other screenshot.
+- **Prompt library sharing** — export your saved prompts to a JSON file and import one a teammate sent you (Settings → Prompt Library). There's no live sync — it's just a plain file, sent however you like.
 
 **Agent mode** — see the [dedicated section](#agent-mode) below.
 

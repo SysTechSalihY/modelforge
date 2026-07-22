@@ -124,6 +124,28 @@ export interface ProjectScripts {
   format?: string;
 }
 
+export interface ScreenSourceInfo {
+  id: string;
+  name: string;
+  thumbnailDataUrl: string;
+}
+
+export interface ScreenCaptureResult {
+  dataBase64?: string;
+  mimeType?: string;
+  error?: string;
+}
+
+export interface FigmaFetchResult {
+  result?: { dataBase64: string; mimeType: string; name: string };
+  error?: string;
+}
+
+export interface OcrResult {
+  text?: string;
+  error?: string;
+}
+
 export interface AppSettings {
   defaultModel: string | null;
   ollamaHost: string;
@@ -327,6 +349,8 @@ export interface ElectronApi {
     import: () => Promise<{ imported: number }>;
     getUserDataPath: () => Promise<string>;
     openUserDataFolder: () => Promise<void>;
+    exportPromptPresets: (presets: PromptPreset[]) => Promise<{ success: boolean }>;
+    importPromptPresets: () => Promise<PromptPreset[]>;
   };
   projects: {
     list: () => Promise<Project[]>;
@@ -354,6 +378,16 @@ export interface ElectronApi {
     ) => Promise<{ tools?: { name: string; description?: string; inputSchema?: Record<string, unknown> }[]; error?: string }>;
     disconnect: (id: string) => Promise<void>;
     status: () => Promise<Record<string, McpServerStatus>>;
+  };
+  screen: {
+    listSources: () => Promise<ScreenSourceInfo[]>;
+    capture: (sourceId: string) => Promise<ScreenCaptureResult>;
+  };
+  figma: {
+    fetchFrame: (url: string) => Promise<FigmaFetchResult>;
+  };
+  ocr: {
+    recognize: (imageBase64: string) => Promise<OcrResult>;
   };
 }
 

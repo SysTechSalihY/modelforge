@@ -4,9 +4,32 @@ import type { AttachedFile, MediaAttachment } from "./file-reader";
 import type { ChatMessage, ChatChunk, ChatOptions, ProviderId } from "./providers/types";
 import type { McpServerConfig, McpServerStatus } from "./mcp-client";
 import type { RollbackResult, ProjectScripts } from "./agent-tools";
+import type { PromptPreset } from "./settings-store";
 
 interface ToolExecuteResult {
     result?: unknown;
+    error?: string;
+}
+
+interface ScreenSourceInfo {
+    id: string;
+    name: string;
+    thumbnailDataUrl: string;
+}
+
+interface ScreenCaptureResult {
+    dataBase64?: string;
+    mimeType?: string;
+    error?: string;
+}
+
+interface FigmaFetchResult {
+    result?: { dataBase64: string; mimeType: string; name: string };
+    error?: string;
+}
+
+interface OcrResult {
+    text?: string;
     error?: string;
 }
 
@@ -126,6 +149,9 @@ contextBridge.exposeInMainWorld("api", {
         import: () => ipcRenderer.invoke("data:import"),
         getUserDataPath: () => ipcRenderer.invoke("data:getUserDataPath"),
         openUserDataFolder: () => ipcRenderer.invoke("data:openUserDataFolder"),
+        exportPromptPresets: (presets: PromptPreset[]): Promise<{ success: boolean }> =>
+            ipcRenderer.invoke("data:exportPromptPresets", presets),
+        importPromptPresets: (): Promise<PromptPreset[]> => ipcRenderer.invoke("data:importPromptPresets"),
     },
 
     projects: {
@@ -156,5 +182,18 @@ contextBridge.exposeInMainWorld("api", {
         connect: (config: McpServerConfig): Promise<McpConnectResult> => ipcRenderer.invoke("mcp:connect", config),
         disconnect: (id: string): Promise<void> => ipcRenderer.invoke("mcp:disconnect", id),
         status: (): Promise<Record<string, McpServerStatus>> => ipcRenderer.invoke("mcp:status"),
+    },
+
+    screen: {
+        listSources: (): Promise<ScreenSourceInfo[]> => ipcRenderer.invoke("screen:listSources"),
+        capture: (sourceId: string): Promise<ScreenCaptureResult> => ipcRenderer.invoke("screen:capture", sourceId),
+    },
+
+    figma: {
+        fetchFrame: (url: string): Promise<FigmaFetchResult> => ipcRenderer.invoke("figma:fetchFrame", url),
+    },
+
+    ocr: {
+        recognize: (imageBase64: string): Promise<OcrResult> => ipcRenderer.invoke("ocr:recognize", imageBase64),
     },
 });

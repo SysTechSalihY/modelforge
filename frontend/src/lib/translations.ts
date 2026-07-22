@@ -127,6 +127,20 @@ export interface Dictionary {
     analyzeToCode: string;
     analyzeListComponents: string;
     analyzeFindIssues: string;
+    sharePrompts: string;
+    sharePromptsHint: string;
+    noPromptsImported: string;
+    importedPromptsCount: string;
+    captureScreenshot: string;
+    captureScreenshotHelp: string;
+    noScreenSources: string;
+    integrations: string;
+    figmaTokenHint: string;
+    attachFigmaFrame: string;
+    figmaUrlPlaceholder: string;
+    figmaFetch: string;
+    extractTextOcr: string;
+    ocrNoTextFound: string;
     resetToDefault: string;
     usingCustomPrompt: string;
     dataManagement: string;
@@ -292,6 +306,20 @@ export const en: Dictionary = {
     analyzeToCode: "Convert to React + Tailwind code",
     analyzeListComponents: "List UI components",
     analyzeFindIssues: "Find usability/accessibility issues",
+    sharePrompts: "Share prompts",
+    sharePromptsHint: "Export your Prompt Library to a file to share with teammates, or import one they sent you. There's no live sync — this is a plain file you send however you like.",
+    noPromptsImported: "No prompts found in that file.",
+    importedPromptsCount: "Imported",
+    captureScreenshot: "Capture screenshot",
+    captureScreenshotHelp: "Pick a screen or window to attach as an image. On macOS you may need to grant Screen Recording permission first.",
+    noScreenSources: "No screens or windows available to capture.",
+    integrations: "Integrations",
+    figmaTokenHint: "Add a Figma personal access token (Figma -> Settings -> Personal access tokens) to attach frames directly from a Figma link.",
+    attachFigmaFrame: "Attach Figma frame...",
+    figmaUrlPlaceholder: "Paste a Figma frame link (Copy link to selection)...",
+    figmaFetch: "Fetch",
+    extractTextOcr: "Extract text (OCR)",
+    ocrNoTextFound: "No text found in that image.",
     resetToDefault: "Reset to default",
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
@@ -465,6 +493,20 @@ export const tr: Dictionary = {
     analyzeToCode: "React + Tailwind koduna dönüştür",
     analyzeListComponents: "UI bileşenlerini listele",
     analyzeFindIssues: "Kullanılabilirlik/erişilebilirlik sorunlarını bul",
+    sharePrompts: "Promptları paylaş",
+    sharePromptsHint: "Prompt kitaplığınızı bir dosyaya aktararak ekip arkadaşlarınızla paylaşın veya size gönderilen bir dosyayı içe aktarın. Canlı senkronizasyon yoktur — bu, istediğiniz şekilde gönderebileceğiniz düz bir dosyadır.",
+    noPromptsImported: "O dosyada prompt bulunamadı.",
+    importedPromptsCount: "İçe aktarıldı:",
+    captureScreenshot: "Ekran görüntüsü al",
+    captureScreenshotHelp: "Görüntü olarak eklemek için bir ekran veya pencere seçin. macOS'ta önce Ekran Kaydı izni vermeniz gerekebilir.",
+    noScreenSources: "Yakalanacak ekran veya pencere yok.",
+    integrations: "Entegrasyonlar",
+    figmaTokenHint: "Figma bağlantısından doğrudan çerçeve eklemek için bir Figma kişisel erişim belirteci ekleyin (Figma -> Settings -> Personal access tokens).",
+    attachFigmaFrame: "Figma çerçevesi ekle...",
+    figmaUrlPlaceholder: "Bir Figma çerçeve bağlantısı yapıştırın (Copy link to selection)...",
+    figmaFetch: "Getir",
+    extractTextOcr: "Metni çıkar (OCR)",
+    ocrNoTextFound: "O görüntüde metin bulunamadı.",
     resetToDefault: "Varsayılana dön",
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",
