@@ -581,14 +581,19 @@ export default function Settings() {
 
     return (
         <ScrollArea className="h-full">
-            <div className="mx-auto max-w-2xl p-6 pb-16 2xl:max-w-3xl">
+            <div className="mx-auto max-w-4xl p-6 pb-16 2xl:max-w-5xl">
                 <div className="mb-6 flex items-center gap-2">
                     <Settings2 className="size-5 text-muted-foreground" />
                     <h1 className="text-lg font-semibold tracking-tight">{t.settings}</h1>
                 </div>
 
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SettingsTab)}>
-                    <TabsList className="mb-6 h-auto flex-wrap">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(v) => setActiveTab(v as SettingsTab)}
+                    orientation="vertical"
+                    className="items-start gap-8"
+                >
+                    <TabsList variant="line" className="w-48 shrink-0">
                         <TabsTrigger value="general">{t.settingsTabGeneral}</TabsTrigger>
                         <TabsTrigger value="models">{t.settingsTabModels}</TabsTrigger>
                         <TabsTrigger value="integrations">{t.settingsTabIntegrations}</TabsTrigger>
@@ -597,7 +602,7 @@ export default function Settings() {
                         <TabsTrigger value="data">{t.settingsTabData}</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="general" className="flex flex-col gap-8">
+                    <TabsContent value="general" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         <SettingsSection title={t.ollamaServer}>
                             <SettingsRow
@@ -780,7 +785,7 @@ export default function Settings() {
                     </div>
                     </TabsContent>
 
-                    <TabsContent value="models" className="flex flex-col gap-8">
+                    <TabsContent value="models" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         {specs && (
                             <SettingsSection title={t.yourSystem}>
@@ -1047,7 +1052,7 @@ export default function Settings() {
                     </div>
                     </TabsContent>
 
-                    <TabsContent value="integrations" className="flex flex-col gap-8">
+                    <TabsContent value="integrations" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         <SettingsSection title={t.cloudProviders} description={t.keysEncryptedNote}>
                             <SettingsRow label="ChatGPT (OpenAI)" stacked>
@@ -1242,7 +1247,7 @@ export default function Settings() {
                     </div>
                     </TabsContent>
 
-                    <TabsContent value="voice" className="flex flex-col gap-8">
+                    <TabsContent value="voice" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         {settings && (
                             <SettingsSection title={t.ttsSection}>
@@ -1297,7 +1302,7 @@ export default function Settings() {
                     </div>
                     </TabsContent>
 
-                    <TabsContent value="chat" className="flex flex-col gap-8">
+                    <TabsContent value="chat" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         {settings && (
                             <>
@@ -1622,7 +1627,7 @@ export default function Settings() {
                     </div>
                     </TabsContent>
 
-                    <TabsContent value="data" className="flex flex-col gap-8">
+                    <TabsContent value="data" className="min-w-0 flex-1 flex flex-col gap-8">
                     <div>
                         <SettingsSection title={t.dataManagement}>
                             <SettingsRow label={t.exportAllConversations} description={t.exportAllDescription}>

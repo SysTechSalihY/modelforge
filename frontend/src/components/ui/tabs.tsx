@@ -71,7 +71,11 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      // The outgoing panel during a tab switch is marked `inert` (and stays
+      // mounted) rather than removed outright, since base-ui's Panel is
+      // built to support an exit transition — without one defined here, it
+      // would otherwise sit fully visible on top of the incoming panel.
+      className={cn("flex-1 text-sm outline-none [&[inert]]:hidden", className)}
       {...props}
     />
   )
