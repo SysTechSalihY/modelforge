@@ -125,8 +125,9 @@ Click **Agent** in the chat toolbar and pick a folder — that becomes the model
 | `run_command` | Execute a shell command in the workspace (or a subfolder), with a 60s timeout |
 
 **Safety model:**
-- Every tool call is confined to the chosen workspace folder — path-traversal attempts (`../../etc`, absolute paths elsewhere on disk) are rejected before anything runs.
-- Every call shows an **Allow / Deny** card before it executes — nothing runs without an explicit click. Read-only tools (`read_file`, `list_dir`, `search_files`) can be marked "always allow this session" to cut down on repetitive approvals; `write_file` and `run_command` always require a fresh click, since they have real, potentially irreversible effects.
+- `read_file`, `write_file`, `list_dir`, and `search_files` are genuinely confined to the chosen workspace folder — path-traversal attempts (`../../etc`, absolute paths elsewhere on disk) are rejected before anything runs.
+- `run_command` is different: a shell command is opaque text that can reference any path on the system regardless of its working directory, so it isn't sandboxed the way the file tools are. As a safety net, commands matching destructive or system-level patterns — deleting outside the workspace, formatting a drive, shutting down the machine, registry deletion, `sudo`/`runas`, piping a remote script into a shell — are **rejected outright**, even if already approved. This blocklist catches the common catastrophic cases, not everything a shell can do — only approve a command you actually understand.
+- Every call (including ones the blocklist doesn't catch) shows an **Allow / Deny** card before it executes — nothing runs without an explicit click. Read-only tools (`read_file`, `list_dir`, `search_files`) can be marked "always allow this session" to cut down on repetitive approvals; `write_file` and `run_command` always require a fresh click, since they have real, potentially irreversible effects.
 - A per-turn step limit (25 tool-result → model-continuation round trips) stops a model from looping indefinitely without producing a final answer.
 - The trust list for "always allow" is in-memory only — closing and reopening a chat resets it.
 

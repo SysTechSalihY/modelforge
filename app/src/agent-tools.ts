@@ -56,7 +56,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
     {
         name: "run_command",
         description:
-            "Execute a shell command in the workspace (or a subdirectory of it) and return its stdout/stderr/exit code. Use for builds, tests, git, npm, etc.",
+            "Execute a shell command in the workspace (or a subdirectory of it) and return its stdout/stderr/exit code. Use for builds, tests, git, npm, etc. Commands that could affect the system outside the workspace (deleting elsewhere, shutting down the machine, privilege escalation, etc.) are rejected.",
         parameters: {
             type: "object",
             properties: {
@@ -161,6 +161,43 @@ export function searchFiles(workspaceRoot: string, query: string, relativePath =
     return results;
 }
 
+// Defense in depth for `run_command`: the workspace-root sandboxing above
+// only constrains our own read_file/write_file/list_dir/search_files
+// implementations, which build and validate paths themselves. A shell
+// command is opaque text — it can reference any path on disk (`rm -rf ~`,
+// `del C:\Windows`) regardless of the `cwd` we launch it in, so `cwd`
+// alone is not a real sandbox against a destructive command. This can't
+// catch everything a shell is capable of, but it blocks the common,
+// catastrophic patterns outright — even if the user already clicked
+// "Allow" without noticing what the command actually does.
+const DANGEROUS_COMMAND_PATTERNS: RegExp[] = [
+    /\brm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+(\/|~|\*|\$HOME|\.\.)/i, // rm -rf /, ~, *, ..
+    /\bdel\s+\/[sf]\s.*[a-z]:\\/i, // del /s /q C:\...
+    /\brd\s+\/s\s+\/q\s+[a-z]:\\/i, // rd /s /q C:\...
+    /\bformat\s+[a-z]:/i,
+    /\bdiskpart\b/i,
+    /\bmkfs(\.\w+)?\b/i,
+    /\bdd\s+if=.*\bof=\/dev\//i,
+    /\b(shutdown|reboot)\b/i,
+    /\bRestart-Computer\b/i,
+    /\bStop-Computer\b/i,
+    /:\(\)\s*\{\s*:\|\s*:&\s*\}\s*;\s*:/, // classic fork bomb
+    /\breg(\.exe)?\s+delete\b/i,
+    /\bregedit\b/i,
+    /\bsudo\b/i,
+    /\brunas\b/i,
+    /\bchmod\s+-R\s+777\s+\//i,
+    /\bcurl\b[^|]*\|\s*(sh|bash|zsh)\b/i, // curl ... | sh
+    /\b(iwr|Invoke-WebRequest)\b[^|]*\|\s*(iex|Invoke-Expression)\b/i,
+];
+
+export function findDangerousCommandReason(command: string): string | null {
+    const match = DANGEROUS_COMMAND_PATTERNS.find((pattern) => pattern.test(command));
+    return match
+        ? "This command was blocked because it matches a pattern that could affect your whole system rather than just the workspace folder (e.g. deleting outside it, a system shutdown, or a privilege-escalation attempt)."
+        : null;
+}
+
 function truncateOutput(text: string): string {
     return text.length > MAX_COMMAND_OUTPUT_CHARS
         ? `${text.slice(0, MAX_COMMAND_OUTPUT_CHARS)}\n[truncated]`
@@ -175,6 +212,9 @@ function formatCommandResult(stdout: string, stderr: string, exitCode: number | 
 }
 
 export async function runCommand(workspaceRoot: string, command: string, relativeCwd = "."): Promise<string> {
+    const dangerReason = findDangerousCommandReason(command);
+    if (dangerReason) throw new Error(dangerReason);
+
     const cwd = resolveSafePath(workspaceRoot, relativeCwd);
     try {
         const { stdout, stderr } = await execAsync(command, {
