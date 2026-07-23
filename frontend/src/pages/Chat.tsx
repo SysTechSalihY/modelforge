@@ -107,6 +107,11 @@ const CUSTOM_SENTINEL = "__custom__";
 // every file's full content into the prompt (which would blow out context on
 // smaller models and waste tokens on larger ones).
 const RAG_THRESHOLD_CHARS = 20_000;
+// Mounting every message in a very long chat is what actually causes scroll
+// jank (each one runs a Markdown parse) — so past this many messages, only
+// the most recent window renders by default, with older ones revealed a
+// window at a time on request rather than all at once.
+const RENDER_WINDOW_SIZE = 60;
 // Read-only tools are safe to let the model call repeatedly without a fresh
 // click each time — write_file and run_command always require explicit
 // per-call approval since they have real, potentially irreversible effects.
@@ -439,6 +444,7 @@ export default function Chat() {
     const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
     const [contextSummary, setContextSummary] = useState<string | null>(null);
     const [contextSummaryThroughIndex, setContextSummaryThroughIndex] = useState(0);
+    const [renderLimit, setRenderLimit] = useState(RENDER_WINDOW_SIZE);
     const [projectScripts, setProjectScripts] = useState<ProjectScripts>({});
     const [quickActionRunning, setQuickActionRunning] = useState(false);
     const [undoMessage, setUndoMessage] = useState<string | null>(null);
@@ -522,6 +528,7 @@ export default function Chat() {
             setPlanSteps(session.planSteps ?? []);
             setContextSummary(session.contextSummary ?? null);
             setContextSummaryThroughIndex(session.contextSummaryThroughIndex ?? 0);
+            setRenderLimit(RENDER_WINDOW_SIZE);
             setAutoApprovedTools(new Set());
             setWriteDiffPreviews({});
             setUndoMessage(null);
@@ -1280,6 +1287,20 @@ export default function Chat() {
     }
 
     function scrollToMessage(index: number) {
+        // The target may be outside the current render window (an older
+        // message than what's mounted) — widen it enough to include the
+        // target before the DOM node can be found at all.
+        if (index < visibleStartIndex) {
+            setRenderLimit(messages.length - index + RENDER_WINDOW_SIZE);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    viewportRef.current
+                        ?.querySelector(`[data-message-index="${index}"]`)
+                        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                });
+            });
+            return;
+        }
         const el = viewportRef.current?.querySelector(`[data-message-index="${index}"]`);
         el?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
@@ -1366,6 +1387,8 @@ export default function Chat() {
         };
     }, [attachments]);
     const lastAssistantIndex = useMemo(() => messages.findLastIndex((message) => message.role === "assistant"), [messages]);
+    const visibleStartIndex = messages.length > renderLimit ? messages.length - renderLimit : 0;
+    const hiddenMessageCount = visibleStartIndex;
     const sessionCost = useMemo(
         () =>
             parsedModel && parsedModel.provider !== "ollama" && parsedModel.provider !== "llamacpp"
@@ -1938,25 +1961,36 @@ export default function Chat() {
                             </div>
                         </div>
                     )}
-                    {messages.map((m, i) => (
-                        <MessageBubble
-                            key={i}
-                            message={m}
-                            index={i}
-                            isLastAssistant={m.role === "assistant" && i === lastAssistantIndex}
-                            isStreaming={isStreaming}
-                            copied={copiedIndex === i}
-                            speaking={speakingIndex === i}
-                            provider={parsedModel?.provider}
-                            modelId={parsedModel?.modelId}
-                            onCopy={handleCopyMessage}
-                            onEdit={handleEditUserMessage}
-                            onRegenerate={handleRegenerate}
-                            onToggleSpeak={toggleSpeak}
-                            onTogglePin={togglePinMessage}
-                            onFork={forkFromMessage}
-                        />
-                    ))}
+                    {hiddenMessageCount > 0 && (
+                        <button
+                            onClick={() => setRenderLimit((n) => n + RENDER_WINDOW_SIZE)}
+                            className="mx-auto rounded-full border border-border bg-muted/50 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                        >
+                            {t.showEarlierMessages(hiddenMessageCount)}
+                        </button>
+                    )}
+                    {messages.slice(visibleStartIndex).map((m, localIndex) => {
+                        const i = visibleStartIndex + localIndex;
+                        return (
+                            <MessageBubble
+                                key={i}
+                                message={m}
+                                index={i}
+                                isLastAssistant={m.role === "assistant" && i === lastAssistantIndex}
+                                isStreaming={isStreaming}
+                                copied={copiedIndex === i}
+                                speaking={speakingIndex === i}
+                                provider={parsedModel?.provider}
+                                modelId={parsedModel?.modelId}
+                                onCopy={handleCopyMessage}
+                                onEdit={handleEditUserMessage}
+                                onRegenerate={handleRegenerate}
+                                onToggleSpeak={toggleSpeak}
+                                onTogglePin={togglePinMessage}
+                                onFork={forkFromMessage}
+                            />
+                        );
+                    })}
                     {pendingToolCalls.map((call) => {
                         if (call.name === "request_checkpoint") {
                             const summary = String(call.arguments.summary ?? "");

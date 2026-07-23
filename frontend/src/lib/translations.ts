@@ -11,6 +11,7 @@ export interface Dictionary {
     model: string;
     sendMessage: string;
     startConversationWith: (model: string) => string;
+    showEarlierMessages: (count: number) => string;
     attach: string;
     attachFiles: string;
     attachProjectFolder: string;
@@ -319,6 +320,7 @@ export const en: Dictionary = {
     model: "Model",
     sendMessage: "Send a message...",
     startConversationWith: (model) => `Start a conversation with ${model}.`,
+    showEarlierMessages: (count) => `Show ${count} earlier message${count === 1 ? "" : "s"}`,
     attach: "Attach",
     attachFiles: "Attach files",
     attachProjectFolder: "Attach project folder",
@@ -637,6 +639,7 @@ export const tr: Dictionary = {
     model: "Model",
     sendMessage: "Bir mesaj gönderin...",
     startConversationWith: (model) => `${model} ile sohbete başlayın.`,
+    showEarlierMessages: (count) => `${count} önceki mesajı göster`,
     attach: "Ekle",
     attachFiles: "Dosya ekle",
     attachProjectFolder: "Proje klasörü ekle",
