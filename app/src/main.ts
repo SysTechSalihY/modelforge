@@ -294,8 +294,8 @@ function registerIpcHandlers(): void {
     );
 
     ipcMain.handle("llamacpp:listModels", () => llamacpp.listModels(getLlamaCppModelsDir()));
-    ipcMain.handle("llamacpp:deleteModel", (_event: IpcMainInvokeEvent, name: string) => {
-        llamacpp.deleteModel(getLlamaCppModelsDir(), requireString(name, "model name"));
+    ipcMain.handle("llamacpp:deleteModel", async (_event: IpcMainInvokeEvent, name: string) => {
+        await llamacpp.deleteModel(getLlamaCppModelsDir(), requireString(name, "model name"));
     });
     ipcMain.handle("llamacpp:getAvailableGpuBackends", () => llamacpp.getAvailableGpuBackends());
     ipcMain.handle("llamacpp:setGpuBackend", async (_event: IpcMainInvokeEvent, backend: llamacpp.GpuBackend) => {

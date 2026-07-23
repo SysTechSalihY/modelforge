@@ -39,6 +39,52 @@ const modelLoads = new Map<string, Promise<LlamaModel>>();
 const modelLastUsed = new Map<string, number>();
 const activeModelUsers = new Map<string, number>();
 let maxCachedModels = 2;
+// Keep warm weights for fast follow-up prompts, then release their RAM/VRAM
+// after inactivity. Headless deployments can override the default without a
+// new UI setting; 0 disables time-based eviction.
+const configuredIdleMinutes = Number(process.env.OLLAMA_CUSTOM_UI_LLAMA_IDLE_MINUTES ?? 15);
+const modelIdleTimeoutMs = Number.isFinite(configuredIdleMinutes)
+    ? Math.max(0, configuredIdleMinutes) * 60_000
+    : 15 * 60_000;
+let idleEvictionTimer: NodeJS.Timeout | null = null;
+
+function clearIdleEvictionTimer(): void {
+    if (!idleEvictionTimer) return;
+    clearTimeout(idleEvictionTimer);
+    idleEvictionTimer = null;
+}
+
+function scheduleIdleEviction(): void {
+    clearIdleEvictionTimer();
+    if (modelIdleTimeoutMs === 0 || modelCache.size === 0) return;
+
+    const now = Date.now();
+    const nextExpiry = [...modelCache.keys()]
+        .filter((key) => (activeModelUsers.get(key) ?? 0) === 0)
+        .map((key) => (modelLastUsed.get(key) ?? now) + modelIdleTimeoutMs)
+        .sort((a, b) => a - b)[0];
+    if (nextExpiry === undefined) return;
+
+    idleEvictionTimer = setTimeout(() => {
+        idleEvictionTimer = null;
+        void evictExpiredModels();
+    }, Math.max(1_000, nextExpiry - now));
+    idleEvictionTimer.unref();
+}
+
+async function evictExpiredModels(): Promise<void> {
+    const cutoff = Date.now() - modelIdleTimeoutMs;
+    const expiredModels: LlamaModel[] = [];
+    for (const [key, model] of modelCache) {
+        if ((activeModelUsers.get(key) ?? 0) > 0) continue;
+        if ((modelLastUsed.get(key) ?? 0) > cutoff) continue;
+        modelCache.delete(key);
+        modelLastUsed.delete(key);
+        expiredModels.push(model);
+    }
+    await Promise.allSettled(expiredModels.map((model) => model.dispose()));
+    scheduleIdleEviction();
+}
 
 export function setModelCacheLimit(limit: number): void {
     if (!Number.isFinite(limit)) return;
@@ -55,6 +101,9 @@ export async function setGpuBackend(backend: GpuBackend): Promise<void> {
         throw new Error(`Unsupported llama.cpp GPU backend: ${String(backend)}`);
     }
     if (backend === activeBackend) return;
+    if ([...activeModelUsers.values()].some((users) => users > 0)) {
+        throw new Error("The GPU backend cannot be changed while a llama.cpp response is being generated.");
+    }
     const oldModels = [...modelCache.values()];
     const oldLlama = llamaInstance;
     activeBackend = backend;
@@ -68,6 +117,7 @@ export async function setGpuBackend(backend: GpuBackend): Promise<void> {
     modelLoads.clear();
     modelLastUsed.clear();
     activeModelUsers.clear();
+    clearIdleEvictionTimer();
 
     // Native model buffers can outlive their JS references. Explicitly
     // dispose them so a backend switch returns VRAM before reallocating it.
@@ -116,6 +166,7 @@ async function loadModel(modelPath: string, gpuLayers?: number): Promise<LlamaMo
     const cached = modelCache.get(key);
     if (cached) {
         modelLastUsed.set(key, Date.now());
+        scheduleIdleEviction();
         return cached;
     }
     const pending = modelLoads.get(key);
@@ -134,6 +185,7 @@ async function loadModel(modelPath: string, gpuLayers?: number): Promise<LlamaMo
         modelCache.set(key, model);
         modelLastUsed.set(key, Date.now());
         await evictIdleModels(key);
+        scheduleIdleEviction();
         return model;
     })();
     modelLoads.set(key, load);
@@ -155,10 +207,12 @@ async function evictIdleModels(protectedKey?: string): Promise<void> {
         modelLastUsed.delete(candidate);
         if (model) await model.dispose();
     }
+    scheduleIdleEviction();
 }
 
 export async function dispose(): Promise<void> {
     backendRevision++;
+    clearIdleEvictionTimer();
     const models = [...modelCache.values()];
     const llama = llamaInstance;
     modelCache.clear();
@@ -195,20 +249,34 @@ export function listLoadedModels(): string[] {
     return [...new Set([...modelCache.keys()].map((key) => key.split("\0", 1)[0]))];
 }
 
-export function deleteModel(modelsDir: string, name: string): void {
+export async function deleteModel(modelsDir: string, name: string): Promise<void> {
     const root = path.resolve(modelsDir);
     const target = path.resolve(root, name);
-    if (target !== root && !target.startsWith(root + path.sep)) {
+    if (path.basename(name) !== name || !name.toLowerCase().endsWith(".gguf")) {
         throw new Error("Invalid model file name.");
     }
-    fs.rmSync(target, { force: true });
+    if (target === root || !target.startsWith(root + path.sep)) {
+        throw new Error("Invalid model file name.");
+    }
+    const matchingKeys = [...modelCache.keys()].filter((key) => key.startsWith(`${target}\0`));
+    if (matchingKeys.some((key) => (activeModelUsers.get(key) ?? 0) > 0)) {
+        throw new Error("This model cannot be deleted while it is generating a response.");
+    }
+    if ([...modelLoads.keys()].some((key) => key.startsWith(`${target}\0`))) {
+        throw new Error("This model cannot be deleted while it is still loading.");
+    }
+
+    const modelsToDispose: LlamaModel[] = [];
     for (const [key, model] of modelCache) {
         if (key.startsWith(`${target}\0`)) {
             modelCache.delete(key);
             modelLastUsed.delete(key);
-            void model.dispose();
+            modelsToDispose.push(model);
         }
     }
+    await Promise.allSettled(modelsToDispose.map((model) => model.dispose()));
+    fs.rmSync(target, { force: true });
+    scheduleIdleEviction();
 }
 
 // Maps this app's provider-agnostic ChatMessage[] (system/user/assistant,
@@ -288,5 +356,6 @@ export async function chat(
         else activeModelUsers.set(cacheKey, users);
         modelLastUsed.set(cacheKey, Date.now());
         await evictIdleModels();
+        scheduleIdleEviction();
     }
 }
