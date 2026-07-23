@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     Send,
@@ -867,6 +867,44 @@ export default function Chat() {
         // process thinking a generation is still in flight forever.
         window.api.app.setBusy(true);
 
+        // Models often emit many tiny chunks per second. Updating React for
+        // every token makes Markdown parsing and layout dominate the UI thread,
+        // so coalesce chunks into a steady ~30 FPS stream instead.
+        let pendingText = "";
+        let pendingUsage: UsageInfo | undefined;
+        let pendingToolCalls: ToolCall[] = [];
+        let flushTimer: number | null = null;
+        const flushStream = () => {
+            flushTimer = null;
+            if (!pendingText && !pendingUsage && pendingToolCalls.length === 0) return;
+            const text = pendingText;
+            const usage = pendingUsage;
+            const toolCalls = pendingToolCalls;
+            pendingText = "";
+            pendingUsage = undefined;
+            pendingToolCalls = [];
+            setMessages((current) => {
+                const next = [...current];
+                const last = next[next.length - 1];
+                next[next.length - 1] = {
+                    role: "assistant",
+                    content: last.content + text,
+                    usage: usage
+                        ? {
+                              promptTokens: usage.promptTokens ?? last.usage?.promptTokens,
+                              completionTokens: usage.completionTokens ?? last.usage?.completionTokens,
+                              elapsedMs: Date.now() - streamStartedAt,
+                          }
+                        : last.usage,
+                    toolCalls: toolCalls.length > 0 ? [...(last.toolCalls ?? []), ...toolCalls] : last.toolCalls,
+                };
+                return next;
+            });
+        };
+        const scheduleFlush = () => {
+            if (flushTimer === null) flushTimer = window.setTimeout(flushStream, 32);
+        };
+
         const { requestId, promise } = window.api.chat.send(
             parsed.provider,
             parsed.modelId,
@@ -875,28 +913,17 @@ export default function Chat() {
             (chunk) => {
                 const piece = chunk.message?.content ?? "";
                 if (!piece && !chunk.usage && !chunk.toolCalls) return;
-                setMessages((m) => {
-                    const next = [...m];
-                    const last = next[next.length - 1];
-                    next[next.length - 1] = {
-                        role: "assistant",
-                        content: last.content + piece,
-                        usage: chunk.usage
-                            ? {
-                                  promptTokens: chunk.usage.promptTokens ?? last.usage?.promptTokens,
-                                  completionTokens: chunk.usage.completionTokens ?? last.usage?.completionTokens,
-                                  elapsedMs: Date.now() - streamStartedAt,
-                              }
-                            : last.usage,
-                        toolCalls: chunk.toolCalls ? [...(last.toolCalls ?? []), ...chunk.toolCalls] : last.toolCalls,
-                    };
-                    return next;
-                });
+                pendingText += piece;
+                if (chunk.usage) pendingUsage = { ...pendingUsage, ...chunk.usage };
+                if (chunk.toolCalls) pendingToolCalls.push(...chunk.toolCalls);
+                scheduleFlush();
             },
             agentMode && !!agentWorkspace
         );
         setActiveRequestId(requestId);
         const result = await promise;
+        if (flushTimer !== null) window.clearTimeout(flushTimer);
+        flushStream();
         setActiveRequestId(null);
 
         // One silent retry for errors that usually clear on their own
@@ -1252,6 +1279,30 @@ export default function Chat() {
         }
     }
 
+    const parsedModel = useMemo(() => parseModelRef(model), [model]);
+    const { individualAttachments, folderGroups } = useMemo(() => {
+        const individual = attachments.filter((file) => !file.folder);
+        const counts = new Map<string, number>();
+        for (const file of attachments) {
+            if (file.folder) counts.set(file.folder, (counts.get(file.folder) ?? 0) + 1);
+        }
+        return {
+            individualAttachments: individual,
+            folderGroups: [...counts].map(([folder, count]) => ({ folder, count })),
+        };
+    }, [attachments]);
+    const lastAssistantIndex = useMemo(() => messages.findLastIndex((message) => message.role === "assistant"), [messages]);
+    const sessionCost = useMemo(
+        () =>
+            parsedModel && parsedModel.provider !== "ollama" && parsedModel.provider !== "llamacpp"
+                ? messages.reduce((sum, message) => {
+                      if (message.role !== "assistant" || !message.usage) return sum;
+                      return sum + (estimateCost(parsedModel.modelId, message.usage.promptTokens, message.usage.completionTokens) ?? 0);
+                  }, 0)
+                : 0,
+        [messages, parsedModel]
+    );
+
     if (!hasApi) {
         return (
             <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
@@ -1261,22 +1312,7 @@ export default function Chat() {
         );
     }
 
-    const parsedModel = parseModelRef(model);
-    const individualAttachments = attachments.filter((f) => !f.folder);
-    const folderGroups = Array.from(new Set(attachments.filter((f) => f.folder).map((f) => f.folder!))).map(
-        (folder) => ({ folder, count: attachments.filter((f) => f.folder === folder).length })
-    );
-    const lastAssistantIndex = [...messages].map((m) => m.role).lastIndexOf("assistant");
     const currentProject = getCurrentProject();
-
-    const sessionCost =
-        parsedModel && parsedModel.provider !== "ollama" && parsedModel.provider !== "llamacpp"
-            ? messages.reduce((sum, m) => {
-                  if (m.role !== "assistant" || !m.usage) return sum;
-                  const cost = estimateCost(parsedModel.modelId, m.usage.promptTokens, m.usage.completionTokens);
-                  return sum + (cost ?? 0);
-              }, 0)
-            : 0;
 
     return (
         <div className="flex h-full flex-col bg-background/35">

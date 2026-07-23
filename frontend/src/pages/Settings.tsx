@@ -27,6 +27,7 @@ import {
     Volume2,
     Database,
     MemoryStick,
+    UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,12 +83,13 @@ import { useTheme, ACCENT_COLORS, type AccentColor } from "@/components/theme-pr
 import { speakText } from "@/lib/tts";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "general" | "models" | "integrations" | "chat" | "voice" | "automation" | "data";
+type SettingsTab = "general" | "models" | "accounts" | "integrations" | "chat" | "voice" | "automation" | "data";
 
 const SETTINGS_SEARCH_ITEMS: { tab: SettingsTab; label: string; keywords: string }[] = [
     { tab: "general", label: "Appearance, density & motion", keywords: "theme color compact comfortable animation reduced motion language server gpu cache" },
     { tab: "models", label: "Models & hardware", keywords: "ollama hugging face download vram recommendation gguf" },
-    { tab: "integrations", label: "Accounts, providers & MCP", keywords: "github hugging face api key custom gpu backend figma mcp" },
+    { tab: "accounts", label: "Connected accounts", keywords: "github hugging face account token profile repository" },
+    { tab: "integrations", label: "Providers & MCP", keywords: "api key custom gpu backend figma mcp openai claude gemini" },
     { tab: "chat", label: "Chat & agent behavior", keywords: "prompt temperature context tokens agent steps tool calls" },
     { tab: "voice", label: "Voice & speech", keywords: "microphone transcription tts read aloud voice" },
     { tab: "automation", label: "Automation", keywords: "scheduled task interval prompt" },
@@ -184,6 +186,7 @@ export default function Settings() {
     const { refresh: refreshSessions } = useSessions();
     const toast = useToast();
     const activePullCount = useRef(0);
+    const loadedTabs = useRef(new Set<SettingsTab>());
 
     const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpServerStatus>>({});
     const [mcpConnecting, setMcpConnecting] = useState<Record<string, boolean>>({});
@@ -228,39 +231,51 @@ export default function Settings() {
         window.api.ollama.status().then(setRunning);
         window.api.system.getSpecs().then(setSpecs);
         window.api.system.getRecommendations().then(setRecommendations);
-        window.api.system.getActivity().then(setActivity);
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
             setRocmPathInput(s.rocmServerPath ?? "");
             setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings } as Record<KeybindingAction, string>);
-            for (const provider of s.customProviders ?? []) {
+        });
+        refreshInstalled();
+        window.api.llamacpp.listModels().then(setLlamaCppModels);
+        window.api.llamacpp.getAvailableGpuBackends().then(setLlamaCppGpuBackends);
+    }, []);
+
+    useEffect(() => {
+        if (!window.api || loadedTabs.current.has(activeTab)) return;
+        if (activeTab === "integrations" && !settings) return;
+        loadedTabs.current.add(activeTab);
+
+        if (activeTab === "accounts") {
+            Promise.all([window.api.accounts.status("github"), window.api.accounts.status("huggingface")]).then(
+                ([github, huggingface]) => setLinkedAccounts({ github, huggingface })
+            );
+        } else if (activeTab === "integrations") {
+            window.api.secrets.has("openai_api_key").then(setOpenaiKeySet);
+            window.api.secrets.has("anthropic_api_key").then(setAnthropicKeySet);
+            window.api.secrets.has("figma_token").then(setFigmaTokenSet);
+            window.api.secrets.has("gemini_api_key").then(setGeminiKeySet);
+            window.api.mcp.status().then(setMcpStatuses);
+            for (const provider of settings?.customProviders ?? []) {
                 window.api.secrets.has(`custom_${provider.id}_api_key`).then((has) =>
                     setCustomKeySet((prev) => ({ ...prev, [provider.id]: has }))
                 );
             }
-        });
-        window.api.secrets.has("openai_api_key").then(setOpenaiKeySet);
-        window.api.secrets.has("anthropic_api_key").then(setAnthropicKeySet);
-        window.api.secrets.has("figma_token").then(setFigmaTokenSet);
-        window.api.secrets.has("gemini_api_key").then(setGeminiKeySet);
-        Promise.all([window.api.accounts.status("github"), window.api.accounts.status("huggingface")]).then(([github, huggingface]) =>
-            setLinkedAccounts({ github, huggingface })
-        );
-        window.api.app.getVersion().then(setAppVersion);
-        window.api.data.getUserDataPath().then(setUserDataPath);
-        refreshInstalled();
-        window.api.mcp.status().then(setMcpStatuses);
-        window.api.llamacpp.listModels().then(setLlamaCppModels);
-        window.api.llamacpp.getAvailableGpuBackends().then(setLlamaCppGpuBackends);
-        window.api.scheduledTasks.list().then(setScheduledTasks);
-    }, []);
+        } else if (activeTab === "automation") {
+            window.api.scheduledTasks.list().then(setScheduledTasks);
+        } else if (activeTab === "data") {
+            window.api.system.getActivity().then(setActivity);
+            window.api.app.getVersion().then(setAppVersion);
+            window.api.data.getUserDataPath().then(setUserDataPath);
+        }
+    }, [activeTab, settings]);
 
     // Debounced real Hugging Face Hub search — fires a bit after typing stops
     // rather than on every keystroke, since it's a network call.
     useEffect(() => {
         const query = search.trim();
-        if (!hasApi || !query || /^https?:\/\//i.test(query) || /^hf\.co\//i.test(query)) {
+        if (activeTab !== "models" || !hasApi || !query || /^https?:\/\//i.test(query) || /^hf\.co\//i.test(query)) {
             // Intentional: clears stale results when the search box empties or
             // looks like a direct tag/URL paste rather than a search query.
             // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -276,7 +291,7 @@ export default function Settings() {
             setHfSearching(false);
         }, 400);
         return () => clearTimeout(timer);
-    }, [hasApi, search]);
+    }, [activeTab, hasApi, search]);
 
     async function toggleHfExpanded(modelId: string) {
         if (hfExpandedId === modelId) {
@@ -902,6 +917,9 @@ export default function Settings() {
                         </TabsTrigger>
                         <TabsTrigger value="models" className="justify-start gap-2">
                             <Boxes className="size-4 shrink-0" /> {t.settingsTabModels}
+                        </TabsTrigger>
+                        <TabsTrigger value="accounts" className="justify-start gap-2">
+                            <UserRound className="size-4 shrink-0" /> Accounts
                         </TabsTrigger>
                         <TabsTrigger value="integrations" className="justify-start gap-2">
                             <Plug className="size-4 shrink-0" /> {t.settingsTabIntegrations}
@@ -1727,44 +1745,6 @@ export default function Settings() {
                             </SettingsRow>
                         </SettingsSection>
 
-                        <SettingsSection title="Connected accounts" description="Tokens are verified with the provider and encrypted locally when your OS credential store is available." className="mt-8">
-                            {(["github", "huggingface"] as const).map((provider) => {
-                                const account = linkedAccounts[provider];
-                                const label = provider === "github" ? "GitHub" : "Hugging Face";
-                                return (
-                                    <SettingsRow key={provider} label={label} description={provider === "huggingface" ? "Unlock private and gated model repositories you can access." : "Connect your developer identity for repository integrations."} stacked>
-                                        {account ? (
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                {account.avatarUrl && <img src={account.avatarUrl} alt="" className="size-7 rounded-full" />}
-                                                <a href={account.profileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">@{account.username}</a>
-                                                <Badge variant="secondary"><Check className="mr-1 size-3" /> Connected</Badge>
-                                                <Button size="sm" variant="outline" onClick={() => disconnectAccount(provider)}>Disconnect</Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col gap-2">
-                                                <div className="flex gap-1.5">
-                                                    <Input
-                                                        type="password"
-                                                        value={accountTokens[provider]}
-                                                        onChange={(e) => setAccountTokens((current) => ({ ...current, [provider]: e.target.value }))}
-                                                        placeholder={provider === "github" ? "github_pat_..." : "hf_..."}
-                                                        aria-label={`${label} access token`}
-                                                        className="h-8 text-xs"
-                                                    />
-                                                    <Button size="sm" variant="outline" onClick={() => connectAccount(provider)} disabled={!accountTokens[provider].trim() || accountConnecting === provider}>
-                                                        {accountConnecting === provider && <Loader2 className="mr-1 size-3 animate-spin" />} Connect
-                                                    </Button>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Use a fine-grained, read-only token unless you specifically need write access.
-                                                </p>
-                                            </div>
-                                        )}
-                                    </SettingsRow>
-                                );
-                            })}
-                        </SettingsSection>
-
                         <SettingsSection title={t.integrations} description={t.figmaTokenHint} className="mt-8">
                             <SettingsRow label="Figma" stacked>
                                 <div className="flex items-center gap-2">
@@ -1909,6 +1889,54 @@ export default function Settings() {
                             </SettingsSection>
                         )}
                     </div>
+                    </TabsContent>
+
+                    <TabsContent value="accounts" className="min-w-0 flex-1 flex flex-col gap-8">
+                        <div>
+                            <SettingsSection
+                                title="Connected accounts"
+                                description="Link developer services for repository analysis and access to private or gated models. Tokens stay encrypted locally when your OS credential store is available."
+                            >
+                                {(["github", "huggingface"] as const).map((provider) => {
+                                    const account = linkedAccounts[provider];
+                                    const label = provider === "github" ? "GitHub" : "Hugging Face";
+                                    return (
+                                        <SettingsRow
+                                            key={provider}
+                                            label={label}
+                                            description={provider === "huggingface" ? "Access private and gated model repositories available to your account." : "Connect repositories for AI analysis and developer workflows."}
+                                            stacked
+                                        >
+                                            {account ? (
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {account.avatarUrl && <img src={account.avatarUrl} alt="" className="size-8 rounded-full" loading="lazy" />}
+                                                    <a href={account.profileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">@{account.username}</a>
+                                                    <Badge variant="secondary"><Check className="mr-1 size-3" /> Connected</Badge>
+                                                    <Button size="sm" variant="outline" onClick={() => disconnectAccount(provider)}>Disconnect</Button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex gap-1.5">
+                                                        <Input
+                                                            type="password"
+                                                            value={accountTokens[provider]}
+                                                            onChange={(e) => setAccountTokens((current) => ({ ...current, [provider]: e.target.value }))}
+                                                            placeholder={provider === "github" ? "github_pat_..." : "hf_..."}
+                                                            aria-label={`${label} access token`}
+                                                            className="h-8 text-xs"
+                                                        />
+                                                        <Button size="sm" variant="outline" onClick={() => connectAccount(provider)} disabled={!accountTokens[provider].trim() || accountConnecting === provider}>
+                                                            {accountConnecting === provider && <Loader2 className="mr-1 size-3 animate-spin" />} Connect
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">Use a fine-grained, read-only token unless a workflow specifically needs write access.</p>
+                                                </div>
+                                            )}
+                                        </SettingsRow>
+                                    );
+                                })}
+                            </SettingsSection>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="voice" className="min-w-0 flex-1 flex flex-col gap-8">
