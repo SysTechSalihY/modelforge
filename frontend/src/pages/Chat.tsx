@@ -1320,12 +1320,22 @@ export default function Chat() {
                                 ))}
                             </SelectGroup>
                         )}
-                        {!!settings?.rocmServerPath && llamaCppModels.length > 0 && (
+                        {llamaCppModels.length > 0 && (
                             <SelectGroup>
                                 <SelectLabel>ROCm (AMD)</SelectLabel>
                                 {llamaCppModels.map((m) => (
                                     <SelectItem key={m.name} value={formatModelRef("rocm", m.name)}>
                                         {m.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        )}
+                        {(settings?.vllmModels ?? []).length > 0 && (
+                            <SelectGroup>
+                                <SelectLabel>vLLM (managed)</SelectLabel>
+                                {settings!.vllmModels!.map((id) => (
+                                    <SelectItem key={id} value={formatModelRef("vllm", id)}>
+                                        {id}
                                     </SelectItem>
                                 ))}
                             </SelectGroup>

@@ -95,6 +95,10 @@ export interface AppSettings {
     // Path to a ROCm/HIP build of llama.cpp's llama-server binary — enables
     // the "rocm" provider against the same GGUF dir as the llama.cpp backend.
     rocmServerPath?: string;
+    // Hugging Face model ids or local model paths served by the app-managed
+    // vLLM runtime. The `vllm` executable is discovered from PATH by default.
+    vllmModels?: string[];
+    vllmCommand?: string;
 }
 
 const DEFAULTS: AppSettings = {

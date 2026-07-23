@@ -34,8 +34,29 @@ describe("buildServerCommand", () => {
     it("uses distinct fixed ports per backend so both can run at once", () => {
         const mlx = buildServerCommand("mlx", "m", {});
         const rocm = buildServerCommand("rocm", "m", {});
+        const vllm = buildServerCommand("vllm", "m", {});
         const portOf = (args: string[]) => args[args.indexOf("--port") + 1];
         expect(portOf(mlx.args)).not.toBe(portOf(rocm.args));
+        expect(new Set([portOf(mlx.args), portOf(rocm.args), portOf(vllm.args)]).size).toBe(3);
+    });
+
+    it("builds a managed vLLM OpenAI server command", () => {
+        const { command, args } = buildServerCommand("vllm", "meta-llama/Llama-3.1-8B-Instruct", {}, "linux");
+        expect(command).toBe("vllm");
+        expect(args).toEqual(
+            expect.arrayContaining(["serve", "meta-llama/Llama-3.1-8B-Instruct", "--host", "127.0.0.1"])
+        );
+    });
+
+    it("allows a vLLM command override without requiring one", () => {
+        const { command } = buildServerCommand("vllm", "some/model", { vllmCommand: "/opt/vllm/bin/vllm" });
+        expect(command).toBe("/opt/vllm/bin/vllm");
+    });
+
+    it("launches vLLM through WSL automatically on Windows", () => {
+        const { command, args } = buildServerCommand("vllm", "some/model", {}, "win32");
+        expect(command).toBe("wsl.exe");
+        expect(args.slice(0, 4)).toEqual(["--", "vllm", "serve", "some/model"]);
     });
 });
 
@@ -46,5 +67,9 @@ describe("describeSpawnFailure", () => {
 
     it("points rocm failures at the llama-server binary setting", () => {
         expect(describeSpawnFailure("rocm")).toMatch(/llama-server/);
+    });
+
+    it("points vLLM failures at installation rather than endpoint configuration", () => {
+        expect(describeSpawnFailure("vllm")).toMatch(/pip install vllm/);
     });
 });

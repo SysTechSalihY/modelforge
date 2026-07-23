@@ -32,7 +32,7 @@ import { setupMenu } from "./menu";
 import { setupAutoUpdater, checkForUpdatesManually } from "./updater";
 import type { ChatMessage, ChatChunk, ChatOptions, ProviderId, ToolDefinition } from "./providers/types";
 
-const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp" | "custom" | "mlx" | "rocm">, string> = {
+const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp" | "custom" | "mlx" | "rocm" | "vllm">, string> = {
     openai: "openai_api_key",
     anthropic: "anthropic_api_key",
     gemini: "gemini_api_key",
@@ -186,7 +186,7 @@ async function dispatchChat(
     } else if (provider === "llamacpp") {
         const modelPath = path.join(getLlamaCppModelsDir(), model);
         await llamacpp.chat(modelPath, messages, options, onToken, signal, tools);
-    } else if (provider === "mlx" || provider === "rocm") {
+    } else if (provider === "mlx" || provider === "rocm" || provider === "vllm") {
         const settings = settingsStore.getSettings();
         // ROCm serves the same GGUF files as the llama.cpp backend, so the
         // model ref is a filename that must stay inside the models dir; MLX
@@ -200,21 +200,27 @@ async function dispatchChat(
             }
             serverModel = resolved;
         }
-        const baseUrl = await localServers.ensureServer(provider, serverModel, {
+        const lease = await localServers.acquireServer(provider, serverModel, {
             mlxPythonPath: settings.mlxPythonPath,
             rocmServerPath: settings.rocmServerPath,
+            vllmCommand: settings.vllmCommand,
         });
-        // These servers are local and unauthenticated — the "api key" is a
-        // placeholder the OpenAI-compatible client requires but they ignore.
-        await createOpenAiCompatibleChat(`${baseUrl}/v1`, provider === "mlx" ? "MLX" : "ROCm llama-server")(
-            "local",
-            model,
-            messages,
-            options,
-            onToken,
-            signal,
-            tools
-        );
+        try {
+            // Managed runtimes are local and unauthenticated; the key is a
+            // compatibility placeholder for their OpenAI-shaped APIs.
+            const providerLabel = provider === "mlx" ? "MLX" : provider === "vllm" ? "vLLM" : "ROCm llama-server";
+            await createOpenAiCompatibleChat(`${lease.baseUrl}/v1`, providerLabel)(
+                "local",
+                model,
+                messages,
+                options,
+                onToken,
+                signal,
+                tools
+            );
+        } finally {
+            lease.release();
+        }
     } else if (provider === "custom") {
         // model is "<customProviderId>::<actual model id>" — see
         // frontend/src/lib/providers.ts's formatCustomModelRef.

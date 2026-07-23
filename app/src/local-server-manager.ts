@@ -12,7 +12,7 @@ import { logger } from "./logger";
 // - "rocm": AMD-GPU inference via a ROCm/HIP build of llama.cpp's
 //   `llama-server` binary (the official llama.cpp releases ship one), run
 //   against the same GGUF files the built-in llama.cpp backend uses.
-export type LocalBackendId = "mlx" | "rocm";
+export type LocalBackendId = "mlx" | "rocm" | "vllm";
 
 export interface LocalBackendConfig {
     // Path to the ROCm llama-server binary. No sensible default beyond PATH
@@ -20,6 +20,8 @@ export interface LocalBackendConfig {
     rocmServerPath?: string;
     // Python interpreter used to launch mlx_lm.server (needs `pip install mlx-lm`).
     mlxPythonPath?: string;
+    // Optional override; managed vLLM uses the `vllm` command from PATH.
+    vllmCommand?: string;
 }
 
 interface RunningServer {
@@ -27,27 +29,64 @@ interface RunningServer {
     model: string;
     baseUrl: string;
     exited: boolean;
+    activeRequests: number;
+    idleTimer: NodeJS.Timeout | null;
 }
 
 // Fixed per-backend ports so a restarted app reconnects rather than leaking
 // orphan servers across random ports.
-const PORTS: Record<LocalBackendId, number> = { mlx: 8790, rocm: 8791 };
+const PORTS: Record<LocalBackendId, number> = { mlx: 8790, rocm: 8791, vllm: 8792 };
 // First startup can include downloading/loading a multi-GB model.
 const STARTUP_TIMEOUT_MS = 180_000;
 const HEALTH_POLL_MS = 750;
+const configuredIdleMinutes = Number(process.env.OLLAMA_CUSTOM_UI_LOCAL_BACKEND_IDLE_MINUTES ?? 10);
+const IDLE_TIMEOUT_MS = Number.isFinite(configuredIdleMinutes)
+    ? Math.max(0, configuredIdleMinutes) * 60_000
+    : 10 * 60_000;
 
 const servers = new Map<LocalBackendId, RunningServer>();
+const serverStarts = new Map<LocalBackendId, { model: string; promise: Promise<string> }>();
+
+function clearIdleTimer(server: RunningServer): void {
+    if (!server.idleTimer) return;
+    clearTimeout(server.idleTimer);
+    server.idleTimer = null;
+}
+
+function scheduleIdleStop(backend: LocalBackendId, server: RunningServer): void {
+    clearIdleTimer(server);
+    if (IDLE_TIMEOUT_MS === 0 || server.activeRequests > 0 || server.exited) return;
+    server.idleTimer = setTimeout(() => {
+        server.idleTimer = null;
+        if (servers.get(backend) === server && server.activeRequests === 0) {
+            logger.info(`Stopping idle ${backend} runtime to release GPU memory`);
+            stopServer(backend);
+        }
+    }, IDLE_TIMEOUT_MS);
+    server.idleTimer.unref();
+}
 
 export function buildServerCommand(
     backend: LocalBackendId,
     model: string,
-    config: LocalBackendConfig
+    config: LocalBackendConfig,
+    platform: NodeJS.Platform = process.platform
 ): { command: string; args: string[] } {
     const port = PORTS[backend];
     if (backend === "mlx") {
         return {
             command: config.mlxPythonPath?.trim() || "python3",
             args: ["-m", "mlx_lm.server", "--model", model, "--port", String(port), "--host", "127.0.0.1"],
+        };
+    }
+    if (backend === "vllm") {
+        const args = ["serve", model, "--port", String(port), "--host", "127.0.0.1"];
+        if (!config.vllmCommand?.trim() && platform === "win32") {
+            return { command: "wsl.exe", args: ["--", "vllm", ...args] };
+        }
+        return {
+            command: config.vllmCommand?.trim() || "vllm",
+            args,
         };
     }
     return {
@@ -63,9 +102,13 @@ export function buildServerCommand(
 }
 
 export function describeSpawnFailure(backend: LocalBackendId): string {
-    return backend === "mlx"
-        ? "Couldn't launch the MLX server — it needs Python with the mlx-lm package (pip install mlx-lm), available on Apple Silicon Macs."
-        : "Couldn't launch llama-server — set the path to a ROCm (HIP) build of llama.cpp's llama-server binary in Settings.";
+    if (backend === "mlx") {
+        return "Couldn't launch the managed MLX runtime — install mlx-lm (pip install mlx-lm) on an Apple Silicon Mac.";
+    }
+    if (backend === "vllm") {
+        return "Couldn't launch the managed vLLM runtime — install vLLM so the vllm command is available (pip install vllm).";
+    }
+    return "Couldn't launch the managed ROCm runtime — install a ROCm/HIP llama-server build and make llama-server available on PATH.";
 }
 
 // Any HTTP response means the server socket is up (a 404 from a route probe
@@ -83,7 +126,7 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function ensureServer(
+async function startOrReuseServer(
     backend: LocalBackendId,
     model: string,
     config: LocalBackendConfig
@@ -94,6 +137,10 @@ export async function ensureServer(
         // Process alive but unresponsive — restart it below.
     }
     if (existing) {
+        if (existing.activeRequests > 0) {
+            throw new Error(`The ${backend} runtime is busy. Wait for the active response before changing models.`);
+        }
+        clearIdleTimer(existing);
         existing.process.kill();
         servers.delete(backend);
     }
@@ -109,7 +156,14 @@ export async function ensureServer(
         throw new Error(describeSpawnFailure(backend));
     }
 
-    const entry: RunningServer = { process: child, model, baseUrl, exited: false };
+    const entry: RunningServer = {
+        process: child,
+        model,
+        baseUrl,
+        exited: false,
+        activeRequests: 0,
+        idleTimer: null,
+    };
     servers.set(backend, entry);
 
     let spawnError: string | null = null;
@@ -129,8 +183,10 @@ export async function ensureServer(
             servers.delete(backend);
             throw new Error(
                 backend === "mlx"
-                    ? "The MLX server exited during startup — check that mlx-lm is installed and the model id is valid."
-                    : "llama-server exited during startup — check that the binary is a working ROCm build and the model file is a valid GGUF."
+                    ? "The MLX runtime exited during startup — check that mlx-lm is installed and the model id is valid."
+                    : backend === "vllm"
+                      ? "The vLLM runtime exited during startup — check that vLLM supports this model and that enough GPU memory is available."
+                      : "The ROCm runtime exited during startup — check that llama-server is a working HIP build and the model is a valid GGUF."
             );
         }
         if (await isReachable(baseUrl)) return baseUrl;
@@ -141,15 +197,64 @@ export async function ensureServer(
     throw new Error(`The ${backend} server didn't become reachable within ${STARTUP_TIMEOUT_MS / 1000}s.`);
 }
 
+export async function ensureServer(
+    backend: LocalBackendId,
+    model: string,
+    config: LocalBackendConfig
+): Promise<string> {
+    const pending = serverStarts.get(backend);
+    if (pending) {
+        if (pending.model === model) return pending.promise;
+        await pending.promise.catch(() => undefined);
+        return ensureServer(backend, model, config);
+    }
+
+    const promise = startOrReuseServer(backend, model, config);
+    serverStarts.set(backend, { model, promise });
+    try {
+        return await promise;
+    } finally {
+        if (serverStarts.get(backend)?.promise === promise) serverStarts.delete(backend);
+    }
+}
+
+export async function acquireServer(
+    backend: LocalBackendId,
+    model: string,
+    config: LocalBackendConfig
+): Promise<{ baseUrl: string; release(): void }> {
+    const current = servers.get(backend);
+    if (current) clearIdleTimer(current);
+    const baseUrl = await ensureServer(backend, model, config);
+    const server = servers.get(backend);
+    if (!server || server.exited || server.model !== model) {
+        throw new Error(`The ${backend} runtime stopped before the request could start.`);
+    }
+    server.activeRequests++;
+    let released = false;
+    return {
+        baseUrl,
+        release(): void {
+            if (released) return;
+            released = true;
+            if (servers.get(backend) !== server) return;
+            server.activeRequests = Math.max(0, server.activeRequests - 1);
+            scheduleIdleStop(backend, server);
+        },
+    };
+}
+
 export function stopServer(backend: LocalBackendId): void {
     const entry = servers.get(backend);
     if (entry) {
+        clearIdleTimer(entry);
         entry.process.kill();
         servers.delete(backend);
     }
 }
 
 export function stopAll(): void {
+    serverStarts.clear();
     for (const backend of [...servers.keys()]) stopServer(backend);
 }
 

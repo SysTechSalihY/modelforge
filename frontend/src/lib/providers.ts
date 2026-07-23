@@ -14,10 +14,11 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
     custom: "Custom",
     mlx: "MLX (Apple Silicon)",
     rocm: "ROCm (AMD)",
+    vllm: "vLLM (managed)",
 };
 
 // Providers that run models on this machine — no API key, no per-token cost.
-export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "llamacpp", "mlx", "rocm"];
+export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "llamacpp", "mlx", "rocm", "vllm"];
 
 // Curated as of this app's last update — model lineups change often, so the
 // model picker also lets you type a custom model ID directly.

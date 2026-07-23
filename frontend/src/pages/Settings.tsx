@@ -168,6 +168,7 @@ export default function Settings() {
     const [activityLoading, setActivityLoading] = useState(false);
     const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
     const [mlxModelInput, setMlxModelInput] = useState("");
+    const [vllmModelInput, setVllmModelInput] = useState("");
     const [rocmPathInput, setRocmPathInput] = useState("");
     const [recordingAction, setRecordingAction] = useState<KeybindingAction | null>(null);
     const [keybindingConflict, setKeybindingConflict] = useState<string | null>(null);
@@ -669,6 +670,21 @@ export default function Settings() {
         await saveSettings({ mlxModels: (settings.mlxModels ?? []).filter((m) => m !== id) });
     }
 
+    async function addVllmModel() {
+        const id = vllmModelInput.trim();
+        if (!id || !settings) return;
+        const existing = settings.vllmModels ?? [];
+        if (existing.includes(id)) return;
+        await saveSettings({ vllmModels: [...existing, id] });
+        setVllmModelInput("");
+        toast.success("vLLM model added");
+    }
+
+    async function removeVllmModel(id: string) {
+        if (!settings) return;
+        await saveSettings({ vllmModels: (settings.vllmModels ?? []).filter((m) => m !== id) });
+    }
+
     async function saveRocmPath() {
         await saveSettings({ rocmServerPath: rocmPathInput.trim() || undefined });
         toast.success(rocmPathInput.trim() ? t.rocmPathSaved : t.rocmPathCleared);
@@ -1068,7 +1084,11 @@ export default function Settings() {
 
                         {settings && (
                             <SettingsSection title={t.otherBackendsSection} description={t.otherBackendsHint} className="mt-8">
-                                <SettingsRow label={t.rocmServerPathLabel} description={t.rocmServerPathHint} stacked>
+                                <SettingsRow
+                                    label="ROCm runtime override (optional)"
+                                    description="The app manages llama-server automatically from PATH. Set a custom executable only when auto-detection cannot find your ROCm build."
+                                    stacked
+                                >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <Input
                                             value={rocmPathInput}
@@ -1110,6 +1130,41 @@ export default function Settings() {
                                             className="h-8 w-96 max-w-full font-mono text-xs"
                                         />
                                         <Button size="sm" variant="outline" onClick={addMlxModel} disabled={!mlxModelInput.trim()}>
+                                            <Plus className="size-3.5" /> {t.add}
+                                        </Button>
+                                    </div>
+                                </SettingsRow>
+                                <SettingsRow
+                                    label="vLLM models"
+                                    description="Hugging Face model IDs or local model directories served by the app-managed vLLM runtime."
+                                    stacked
+                                >
+                                    {(settings.vllmModels ?? []).length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            {settings.vllmModels!.map((id) => (
+                                                <div key={id} className="flex items-center justify-between gap-2">
+                                                    <span className="truncate font-mono text-xs">{id}</span>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => removeVllmModel(id)}
+                                                        aria-label={`Remove ${id}`}
+                                                    >
+                                                        <Trash2 className="size-3.5 text-destructive" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Input
+                                            value={vllmModelInput}
+                                            onChange={(e) => setVllmModelInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && addVllmModel()}
+                                            placeholder="meta-llama/Llama-3.1-8B-Instruct"
+                                            className="h-8 w-96 max-w-full font-mono text-xs"
+                                        />
+                                        <Button size="sm" variant="outline" onClick={addVllmModel} disabled={!vllmModelInput.trim()}>
                                             <Plus className="size-3.5" /> {t.add}
                                         </Button>
                                     </div>
