@@ -61,6 +61,7 @@ import type {
     HfGgufFile,
     ScheduledTask,
     AppActivity,
+    LinkedAccount,
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
 import { recommendGpuBackend, gpuBackendNote } from "@/lib/gpu";
@@ -137,6 +138,9 @@ export default function Settings() {
     const [anthropicKeySet, setAnthropicKeySet] = useState(false);
     const [figmaTokenInput, setFigmaTokenInput] = useState("");
     const [figmaTokenSet, setFigmaTokenSet] = useState(false);
+    const [accountTokens, setAccountTokens] = useState<Record<"github" | "huggingface", string>>({ github: "", huggingface: "" });
+    const [linkedAccounts, setLinkedAccounts] = useState<Record<"github" | "huggingface", LinkedAccount | null>>({ github: null, huggingface: null });
+    const [accountConnecting, setAccountConnecting] = useState<"github" | "huggingface" | null>(null);
     const [geminiKeyInput, setGeminiKeyInput] = useState("");
     const [geminiKeySet, setGeminiKeySet] = useState(false);
     const [customKeySet, setCustomKeySet] = useState<Record<string, boolean>>({});
@@ -145,6 +149,7 @@ export default function Settings() {
     const [customDraftName, setCustomDraftName] = useState("");
     const [customDraftBaseUrl, setCustomDraftBaseUrl] = useState("");
     const [customDraftModelIds, setCustomDraftModelIds] = useState("");
+    const [customDraftLocalGpu, setCustomDraftLocalGpu] = useState(false);
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
@@ -227,6 +232,9 @@ export default function Settings() {
         window.api.secrets.has("anthropic_api_key").then(setAnthropicKeySet);
         window.api.secrets.has("figma_token").then(setFigmaTokenSet);
         window.api.secrets.has("gemini_api_key").then(setGeminiKeySet);
+        Promise.all([window.api.accounts.status("github"), window.api.accounts.status("huggingface")]).then(([github, huggingface]) =>
+            setLinkedAccounts({ github, huggingface })
+        );
         window.api.app.getVersion().then(setAppVersion);
         window.api.data.getUserDataPath().then(setUserDataPath);
         refreshInstalled();
@@ -461,6 +469,28 @@ export default function Settings() {
         toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
+    async function connectAccount(provider: "github" | "huggingface") {
+        const token = accountTokens[provider].trim();
+        if (!token) return;
+        setAccountConnecting(provider);
+        try {
+            const account = await window.api.accounts.connect(provider, token);
+            setLinkedAccounts((current) => ({ ...current, [provider]: account }));
+            setAccountTokens((current) => ({ ...current, [provider]: "" }));
+            toast.success(`${provider === "github" ? "GitHub" : "Hugging Face"} account linked as @${account.username}.`);
+        } catch (error) {
+            toast.error((error as Error).message);
+        } finally {
+            setAccountConnecting(null);
+        }
+    }
+
+    async function disconnectAccount(provider: "github" | "huggingface") {
+        await window.api.accounts.disconnect(provider);
+        setLinkedAccounts((current) => ({ ...current, [provider]: null }));
+        toast.success(`${provider === "github" ? "GitHub" : "Hugging Face"} account disconnected.`);
+    }
+
     async function saveGeminiKey() {
         const value = geminiKeyInput.trim();
         await window.api.secrets.set("gemini_api_key", value);
@@ -473,6 +503,7 @@ export default function Settings() {
         setCustomDraftName(preset.name);
         setCustomDraftBaseUrl(preset.baseUrl);
         setCustomDraftModelIds(preset.modelIds.join(", "));
+        setCustomDraftLocalGpu(false);
         setShowAddCustomProvider(true);
     }
 
@@ -485,7 +516,7 @@ export default function Settings() {
             .map((s) => s.trim())
             .filter(Boolean);
         if (!name || !baseUrl || modelIds.length === 0) return;
-        const provider = { id: crypto.randomUUID(), name, baseUrl, modelIds };
+        const provider = { id: crypto.randomUUID(), name, baseUrl, modelIds, localGpuBackend: customDraftLocalGpu };
         const updated = await window.api.settings.save({
             customProviders: [...(settings.customProviders ?? []), provider],
         });
@@ -493,6 +524,7 @@ export default function Settings() {
         setCustomDraftName("");
         setCustomDraftBaseUrl("");
         setCustomDraftModelIds("");
+        setCustomDraftLocalGpu(false);
         setShowAddCustomProvider(false);
         toast.success(`${name} — ${t.toastProviderAdded}`);
     }
@@ -1487,12 +1519,13 @@ export default function Settings() {
                             {(settings?.customProviders ?? []).map((provider) => (
                                 <SettingsRow key={provider.id} label={provider.name} description={provider.baseUrl} stacked>
                                     <div className="flex flex-wrap items-center gap-2">
+                                        {provider.localGpuBackend && <Badge variant="secondary">Local GPU backend</Badge>}
                                         {customKeySet[provider.id] && (
                                             <Badge variant="secondary">
                                                 <Check className="mr-1 size-3" /> Configured
                                             </Badge>
                                         )}
-                                        <Input
+                                        {!provider.localGpuBackend && <><Input
                                             type="password"
                                             value={customKeyInputs[provider.id] ?? ""}
                                             onChange={(e) =>
@@ -1509,7 +1542,7 @@ export default function Settings() {
                                             disabled={!(customKeyInputs[provider.id] ?? "").trim()}
                                         >
                                             {t.save}
-                                        </Button>
+                                        </Button></>}
                                         <Button
                                             size="icon"
                                             variant="ghost"
@@ -1542,6 +1575,15 @@ export default function Settings() {
                                             placeholder={t.customProviderModelIds}
                                             className="h-8 text-xs"
                                         />
+                                        <label className="flex items-start gap-2 rounded-md border border-border p-2 text-xs text-muted-foreground">
+                                            <input
+                                                type="checkbox"
+                                                checked={customDraftLocalGpu}
+                                                onChange={(e) => setCustomDraftLocalGpu(e.target.checked)}
+                                                className="mt-0.5"
+                                            />
+                                            <span><strong className="text-foreground">Local custom GPU backend</strong><br />Use an OpenAI-compatible local endpoint without requiring an API key (vLLM, LocalAI, TGI, or a custom llama-server build).</span>
+                                        </label>
                                         <div className="flex gap-1.5">
                                             <Button
                                                 size="sm"
@@ -1580,6 +1622,44 @@ export default function Settings() {
                                     </div>
                                 )}
                             </SettingsRow>
+                        </SettingsSection>
+
+                        <SettingsSection title="Connected accounts" description="Tokens are verified with the provider and encrypted locally when your OS credential store is available." className="mt-8">
+                            {(["github", "huggingface"] as const).map((provider) => {
+                                const account = linkedAccounts[provider];
+                                const label = provider === "github" ? "GitHub" : "Hugging Face";
+                                return (
+                                    <SettingsRow key={provider} label={label} description={provider === "huggingface" ? "Unlock private and gated model repositories you can access." : "Connect your developer identity for repository integrations."} stacked>
+                                        {account ? (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {account.avatarUrl && <img src={account.avatarUrl} alt="" className="size-7 rounded-full" />}
+                                                <a href={account.profileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">@{account.username}</a>
+                                                <Badge variant="secondary"><Check className="mr-1 size-3" /> Connected</Badge>
+                                                <Button size="sm" variant="outline" onClick={() => disconnectAccount(provider)}>Disconnect</Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col gap-2">
+                                                <div className="flex gap-1.5">
+                                                    <Input
+                                                        type="password"
+                                                        value={accountTokens[provider]}
+                                                        onChange={(e) => setAccountTokens((current) => ({ ...current, [provider]: e.target.value }))}
+                                                        placeholder={provider === "github" ? "github_pat_..." : "hf_..."}
+                                                        aria-label={`${label} access token`}
+                                                        className="h-8 text-xs"
+                                                    />
+                                                    <Button size="sm" variant="outline" onClick={() => connectAccount(provider)} disabled={!accountTokens[provider].trim() || accountConnecting === provider}>
+                                                        {accountConnecting === provider && <Loader2 className="mr-1 size-3 animate-spin" />} Connect
+                                                    </Button>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Use a fine-grained, read-only token unless you specifically need write access.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </SettingsRow>
+                                );
+                            })}
                         </SettingsSection>
 
                         <SettingsSection title={t.integrations} description={t.figmaTokenHint} className="mt-8">

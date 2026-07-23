@@ -110,6 +110,8 @@ interface PlanStep {
 
 const READ_ONLY_TOOLS = new Set([
     "read_file",
+    "find_files",
+    "file_info",
     "list_dir",
     "search_files",
     "git_status",
@@ -118,6 +120,9 @@ const READ_ONLY_TOOLS = new Set([
     "web_search",
     "fetch_url",
     "read_notes",
+    "github_list_repositories",
+    "github_repository_tree",
+    "github_read_file",
 ]);
 
 // Vision models can already reason over any attached image — these just save

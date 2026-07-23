@@ -158,6 +158,12 @@ contextBridge.exposeInMainWorld("api", {
         set: (key: string, value: string) => ipcRenderer.invoke("secrets:set", { key, value }),
     },
 
+    accounts: {
+        status: (provider: "github" | "huggingface") => ipcRenderer.invoke("accounts:status", provider),
+        connect: (provider: "github" | "huggingface", token: string) => ipcRenderer.invoke("accounts:connect", { provider, token }),
+        disconnect: (provider: "github" | "huggingface") => ipcRenderer.invoke("accounts:disconnect", provider),
+    },
+
     audio: {
         transcribe: (audioBase64: string, mimeType: string): Promise<{ text?: string; error?: string }> =>
             ipcRenderer.invoke("audio:transcribe", { audioBase64, mimeType }),

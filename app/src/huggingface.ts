@@ -12,10 +12,10 @@ export interface HfGgufFile {
     sizeBytes: number | null;
 }
 
-async function hfFetchJson<T>(url: string): Promise<T> {
+async function hfFetchJson<T>(url: string, token?: string | null): Promise<T> {
     let res: Response;
     try {
-        res = await fetch(url);
+        res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
     } catch (err) {
         throw new Error(`Couldn't reach the Hugging Face API: ${(err as Error).message}`);
     }
@@ -26,17 +26,17 @@ async function hfFetchJson<T>(url: string): Promise<T> {
 // Hugging Face's search endpoint already supports filtering by library/tag —
 // "gguf" narrows results to repos that have at least one GGUF file, which is
 // what matters for both the Ollama and llama.cpp backends this app supports.
-export async function searchGgufModels(query: string, limit = 20): Promise<HfModelSummary[]> {
+export async function searchGgufModels(query: string, limit = 20, token?: string | null): Promise<HfModelSummary[]> {
     const trimmed = query.trim();
     if (!trimmed) return [];
     const url = `${HF_API}/models?search=${encodeURIComponent(trimmed)}&filter=gguf&sort=downloads&direction=-1&limit=${limit}`;
-    const data = await hfFetchJson<{ id: string; downloads?: number; likes?: number; tags?: string[] }[]>(url);
+    const data = await hfFetchJson<{ id: string; downloads?: number; likes?: number; tags?: string[] }[]>(url, token);
     return data.map((m) => ({ id: m.id, downloads: m.downloads ?? 0, likes: m.likes ?? 0, tags: m.tags ?? [] }));
 }
 
-export async function listGgufFiles(modelId: string): Promise<HfGgufFile[]> {
+export async function listGgufFiles(modelId: string, token?: string | null): Promise<HfGgufFile[]> {
     const url = `${HF_API}/models/${modelId}/tree/main`;
-    const data = await hfFetchJson<{ path: string; type: string; size?: number }[]>(url);
+    const data = await hfFetchJson<{ path: string; type: string; size?: number }[]>(url, token);
     return data
         .filter((entry) => entry.type === "file" && entry.path.toLowerCase().endsWith(".gguf"))
         .map((entry) => ({ path: entry.path, sizeBytes: entry.size ?? null }));
@@ -51,13 +51,14 @@ export async function downloadGgufFile(
     modelId: string,
     filename: string,
     destPath: string,
-    onProgress: (progress: DownloadProgress) => void
+    onProgress: (progress: DownloadProgress) => void,
+    token?: string | null
 ): Promise<void> {
     const fs = await import("node:fs");
     const url = `https://huggingface.co/${modelId}/resolve/main/${encodeURIComponent(filename)}`;
     let res: Response;
     try {
-        res = await fetch(url);
+        res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
     } catch (err) {
         throw new Error(`Couldn't reach Hugging Face: ${(err as Error).message}`);
     }

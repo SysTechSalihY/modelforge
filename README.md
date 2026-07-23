@@ -61,6 +61,8 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 **Models & hardware**
 - Model recommendations based on your actual hardware — RAM and VRAM are detected and summed **across all GPUs**, not just the first one, so multi-GPU machines get accurate suggestions.
 - **GPU offload control** — set how many model layers Ollama offloads to GPU (`num_gpu`) per chat, per project, or as a global default; leave it blank to let Ollama decide automatically.
+- **Custom local GPU backends** — register any OpenAI-compatible local endpoint as a no-key GPU backend, including vLLM, LocalAI, TGI, vendor runtimes, and custom CUDA/ROCm/SYCL/Vulkan llama-server builds. Models from these endpoints appear beside other custom providers and retain streaming and Agent tool-calling support when the server supports it.
+- **Bounded VRAM cache** — llama.cpp model loads are coalesced, active models are protected, and idle model/offload variants are evicted least-recently-used so switching models does not grow VRAM use without limit.
 - **Real Hugging Face search** — typing in the model search box queries the actual Hugging Face Hub API (not just "paste an exact URL"), showing real repos ranked by downloads/likes; expand one to see its actual GGUF files with real file sizes, then either pull it via Ollama or download it directly for the llama.cpp backend. Pasting an exact `hf.co/user/repo` tag or a full URL still works too, for Ollama's own pull mechanism.
 - Models with reliable tool/function-calling support are flagged with a 🔧 badge, so picking a good Agent mode model doesn't require guesswork.
 - **Custom model storage location** — Settings → General → Ollama Server → "Model storage location" lets you point downloaded models at any folder (e.g. a larger or faster drive) instead of Ollama's default location. If this app started Ollama, it restarts it automatically with the new location; if Ollama is running outside the app, you're told to restart it yourself.
@@ -142,19 +144,25 @@ Click **Agent** in the chat toolbar and pick a folder — that becomes the model
 
 | Tool | What it does |
 |---|---|
-| `read_file` | Read a text file in the workspace |
+| `read_file` | Read a text file, optionally by line range |
 | `write_file` | Create or overwrite a file (creates parent directories as needed) |
+| `replace_in_file` | Replace an exact text block without rewriting the whole file; supports Undo |
+| `find_files`, `file_info` | Discover files by glob and inspect path metadata |
 | `list_dir` | List files and subdirectories |
 | `search_files` | Search for a text string across the workspace |
+| `make_directory`, `move_path`, `delete_path` | Organize workspace files with explicit approval for mutations |
 | `run_command` | Execute a shell command in the workspace (or a subfolder), with a 60s timeout |
 | `run_code` | Run a Python or JavaScript snippet — a convenience over shell-quoting multi-line code through `run_command`, not a new capability |
 | `git_status`, `git_diff`, `git_log` | Read-only git helpers (auto-approvable, like the file tools) so the model doesn't need to guess flag syntax |
 | `git_commit` | Stage everything and commit — requires approval, like `write_file` |
+| `github_list_repositories` | List repositories accessible to the linked GitHub account |
+| `github_repository_tree` | Inspect a repository's complete file structure before analysis |
+| `github_read_file` | Read selected files from public or private linked-account repositories |
 
 **Safety model:**
-- `read_file`, `write_file`, `list_dir`, and `search_files` are genuinely confined to the chosen workspace folder — path-traversal attempts (`../../etc`, absolute paths elsewhere on disk) are rejected before anything runs.
+- Built-in filesystem tools are genuinely confined to the chosen workspace folder — path traversal (`../../etc`), absolute paths elsewhere on disk, and symlinks that resolve outside the workspace are rejected before anything runs.
 - `run_command` and `run_code` are different: a shell command (or a script `run_code` hands to `python3`/`node`) is opaque text that can reference any path on the system regardless of its working directory, so neither is sandboxed the way the file tools are. As a safety net, commands (and `run_code`'s source text) matching destructive or system-level patterns — deleting outside the workspace, formatting a drive, shutting down the machine, registry deletion, `sudo`/`runas`, piping a remote script into a shell — are **rejected outright**, even if already approved. This blocklist catches the common catastrophic cases, not everything a shell or script can do — only approve a command or snippet you actually understand.
-- Every call (including ones the blocklist doesn't catch) shows an **Allow / Deny** card before it executes — nothing runs without an explicit click. Read-only tools (`read_file`, `list_dir`, `search_files`, `git_status`, `git_diff`, `git_log`) can be marked "always allow this session" to cut down on repetitive approvals; `write_file`, `run_command`, `run_code`, and `git_commit` always require a fresh click, since they have real, potentially irreversible effects.
+- Every call (including ones the blocklist doesn't catch) shows an **Allow / Deny** card before it executes — nothing runs without an explicit click. Read-only tools (`read_file`, `find_files`, `file_info`, `list_dir`, `search_files`, `git_status`, `git_diff`, `git_log`) can be marked "always allow this session" to cut down on repetitive approvals; filesystem mutations, `run_command`, `run_code`, and `git_commit` always require a fresh click, since they have real, potentially irreversible effects.
 - A per-turn step limit (25 tool-result → model-continuation round trips) stops a model from looping indefinitely without producing a final answer.
 - The trust list for "always allow" is in-memory only — closing and reopening a chat resets it.
 

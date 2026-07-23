@@ -17,6 +17,7 @@ import * as mcpClient from "./mcp-client";
 import * as figma from "./figma";
 import * as ocr from "./ocr";
 import * as huggingface from "./huggingface";
+import * as accounts from "./accounts";
 import * as llamacpp from "./llamacpp-manager";
 import * as scheduledTasksStore from "./scheduled-tasks-store";
 import * as scheduler from "./scheduler";
@@ -224,9 +225,9 @@ async function dispatchChat(
         const config = settingsStore.getSettings().customProviders?.find((p) => p.id === customProviderId);
         if (!config) throw new Error(`Custom provider "${customProviderId}" is no longer configured.`);
         const apiKey = secretsStore.getSecret(customProviderSecretKey(customProviderId));
-        if (!apiKey) throw new Error(`No API key set for ${config.name}. Add one in Settings.`);
+        if (!apiKey && !config.localGpuBackend) throw new Error(`No API key set for ${config.name}. Add one in Settings.`);
         await createOpenAiCompatibleChat(config.baseUrl, config.name)(
-            apiKey,
+            apiKey ?? "local-gpu-backend",
             actualModel,
             messages,
             options,
@@ -297,8 +298,8 @@ function registerIpcHandlers(): void {
         llamacpp.deleteModel(getLlamaCppModelsDir(), requireString(name, "model name"));
     });
     ipcMain.handle("llamacpp:getAvailableGpuBackends", () => llamacpp.getAvailableGpuBackends());
-    ipcMain.handle("llamacpp:setGpuBackend", (_event: IpcMainInvokeEvent, backend: llamacpp.GpuBackend) => {
-        llamacpp.setGpuBackend(backend);
+    ipcMain.handle("llamacpp:setGpuBackend", async (_event: IpcMainInvokeEvent, backend: llamacpp.GpuBackend) => {
+        await llamacpp.setGpuBackend(backend);
         settingsStore.saveSettings({ llamaCppGpuBackend: backend });
     });
     ipcMain.handle("llamacpp:pickModelsDir", async () => {
@@ -494,6 +495,16 @@ function registerIpcHandlers(): void {
         secretsStore.setSecret(requireString(key, "secret key"), value ?? "")
     );
 
+    ipcMain.handle("accounts:status", (_event: IpcMainInvokeEvent, provider: accounts.AccountProvider) =>
+        accounts.getLinkedAccount(provider)
+    );
+    ipcMain.handle("accounts:connect", async (_event: IpcMainInvokeEvent, { provider, token }: { provider: accounts.AccountProvider; token: string }) =>
+        accounts.connectAccount(provider, requireString(token, "access token"))
+    );
+    ipcMain.handle("accounts:disconnect", (_event: IpcMainInvokeEvent, provider: accounts.AccountProvider) =>
+        accounts.disconnectAccount(provider)
+    );
+
     ipcMain.handle(
         "audio:transcribe",
         async (_event: IpcMainInvokeEvent, { audioBase64, mimeType }: { audioBase64: string; mimeType: string }) => {
@@ -562,7 +573,7 @@ function registerIpcHandlers(): void {
 
     ipcMain.handle("hf:search", async (_event: IpcMainInvokeEvent, query: string) => {
         try {
-            return { results: await huggingface.searchGgufModels(String(query ?? "")) };
+            return { results: await huggingface.searchGgufModels(String(query ?? ""), 20, accounts.getAccountToken("huggingface")) };
         } catch (err) {
             return { error: (err as Error).message };
         }
@@ -571,7 +582,7 @@ function registerIpcHandlers(): void {
     ipcMain.handle("hf:listFiles", async (_event: IpcMainInvokeEvent, modelId: string) => {
         requireString(modelId, "model id");
         try {
-            return { files: await huggingface.listGgufFiles(modelId) };
+            return { files: await huggingface.listGgufFiles(modelId, accounts.getAccountToken("huggingface")) };
         } catch (err) {
             return { error: (err as Error).message };
         }
@@ -591,7 +602,7 @@ function registerIpcHandlers(): void {
             try {
                 await huggingface.downloadGgufFile(modelId, filename, destPath, (progress) =>
                     event.sender.send(channel, progress)
-                );
+                , accounts.getAccountToken("huggingface"));
                 return { path: destPath };
             } catch (err) {
                 const error = err as Error;
@@ -739,7 +750,7 @@ app.whenReady().then(async () => {
     ollama.setHost(settingsStore.getSettings().ollamaHost);
     ollama.setModelsDir(settingsStore.getSettings().modelsDir);
     await ollama.start();
-    llamacpp.setGpuBackend(settingsStore.getSettings().llamaCppGpuBackend ?? "auto");
+    await llamacpp.setGpuBackend(settingsStore.getSettings().llamaCppGpuBackend ?? "auto");
     setupAutoUpdater(() => mainWindow);
     void connectEnabledMcpServers();
     scheduler.init((provider, model, prompt) => completePrompt(provider as ProviderId, model, prompt));
@@ -759,4 +770,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
     ollama.stop();
     localServers.stopAll();
+    void llamacpp.dispose();
 });

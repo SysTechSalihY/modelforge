@@ -6,6 +6,12 @@ import { execSync } from "node:child_process";
 import {
     readFile,
     writeFile,
+    replaceInFile,
+    findFiles,
+    fileInfo,
+    makeDirectory,
+    movePath,
+    deletePath,
     listDir,
     searchFiles,
     executeTool,
@@ -49,6 +55,13 @@ describe("agent-tools", () => {
             fs.writeFileSync(path.join(workspace, "sub", "file.txt"), "hi");
             expect(readFile(workspace, "sub/file.txt")).toBe("hi");
         });
+
+        it.skipIf(process.platform === "win32")("rejects a symlink that escapes the workspace", () => {
+            const outside = fs.mkdtempSync(path.join(os.tmpdir(), "agent-tools-outside-"));
+            fs.writeFileSync(path.join(outside, "secret.txt"), "secret");
+            fs.symlinkSync(outside, path.join(workspace, "escape"), "dir");
+            expect(() => readFile(workspace, "escape/secret.txt")).toThrow(/symbolic link/);
+        });
     });
 
     describe("readFile", () => {
@@ -68,6 +81,12 @@ describe("agent-tools", () => {
             expect(result.length).toBeLessThan(200_000);
             expect(result).toContain("truncated");
         });
+
+        it("reads an inclusive line range from a large file", () => {
+            fs.writeFileSync(path.join(workspace, "lines.txt"), "one\ntwo\nthree\nfour");
+            expect(readFile(workspace, "lines.txt", 2, 3)).toBe("two\nthree");
+            expect(() => readFile(workspace, "lines.txt", 99, 100)).toThrow(/beyond the file/);
+        });
     });
 
     describe("writeFile", () => {
@@ -86,6 +105,45 @@ describe("agent-tools", () => {
             writeFile(workspace, "x.txt", "first");
             writeFile(workspace, "x.txt", "second");
             expect(fs.readFileSync(path.join(workspace, "x.txt"), "utf-8")).toBe("second");
+        });
+    });
+
+    describe("precise filesystem tools", () => {
+        it("replaces a unique text block and supports rollback", () => {
+            fs.writeFileSync(path.join(workspace, "edit.txt"), "before middle after");
+            expect(replaceInFile(workspace, "edit.txt", "middle", "updated")).toMatchObject({ replacements: 1 });
+            expect(readFile(workspace, "edit.txt")).toBe("before updated after");
+            rollbackLastWrite(workspace);
+            expect(readFile(workspace, "edit.txt")).toBe("before middle after");
+        });
+
+        it("rejects ambiguous replacements unless replaceAll is enabled", () => {
+            fs.writeFileSync(path.join(workspace, "edit.txt"), "same same");
+            expect(() => replaceInFile(workspace, "edit.txt", "same", "new")).toThrow(/matched 2 times/);
+            expect(replaceInFile(workspace, "edit.txt", "same", "new", true).replacements).toBe(2);
+        });
+
+        it("finds files with recursive glob patterns and skips dependencies", () => {
+            fs.mkdirSync(path.join(workspace, "src", "nested"), { recursive: true });
+            fs.writeFileSync(path.join(workspace, "root.ts"), "");
+            fs.writeFileSync(path.join(workspace, "src", "nested", "child.ts"), "");
+            fs.mkdirSync(path.join(workspace, "node_modules"));
+            fs.writeFileSync(path.join(workspace, "node_modules", "ignored.ts"), "");
+            expect(findFiles(workspace, "**/*.ts")).toEqual(["root.ts", "src/nested/child.ts"]);
+        });
+
+        it("reports metadata and creates, moves, then deletes workspace paths", () => {
+            expect(makeDirectory(workspace, "a/b")).toEqual({ created: true });
+            fs.writeFileSync(path.join(workspace, "a", "b", "file.txt"), "hello");
+            expect(fileInfo(workspace, "a/b/file.txt")).toMatchObject({ type: "file", sizeBytes: 5 });
+            expect(movePath(workspace, "a/b/file.txt", "renamed/file.txt")).toEqual({ moved: true });
+            expect(deletePath(workspace, "renamed/file.txt")).toEqual({ deleted: true });
+            expect(fs.existsSync(path.join(workspace, "renamed", "file.txt"))).toBe(false);
+        });
+
+        it("never deletes or moves the workspace root", () => {
+            expect(() => deletePath(workspace, ".", true)).toThrow(/workspace root/);
+            expect(() => movePath(workspace, ".", "moved")).toThrow(/workspace root/);
         });
     });
 

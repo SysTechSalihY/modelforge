@@ -28,28 +28,71 @@ function loadNodeLlamaCpp(): Promise<NodeLlamaCppModule> {
 }
 
 let llamaInstance: Llama | null = null;
+let llamaInstancePromise: Promise<Llama> | null = null;
 let activeBackend: GpuBackend = "auto";
+let backendRevision = 0;
 // Loaded model weights are the expensive, slow-to-load part (can be several
 // GB) — kept warm across chat turns. The lightweight per-turn context/session
 // below is deliberately NOT cached across turns; see chat() for why.
 const modelCache = new Map<string, LlamaModel>();
+const modelLoads = new Map<string, Promise<LlamaModel>>();
+const modelLastUsed = new Map<string, number>();
+const activeModelUsers = new Map<string, number>();
+const MAX_CACHED_MODELS = 2;
 
-export function setGpuBackend(backend: GpuBackend): void {
+function modelCacheKey(modelPath: string, gpuLayers?: number): string {
+    return `${modelPath}\0${gpuLayers ?? "auto"}`;
+}
+
+export async function setGpuBackend(backend: GpuBackend): Promise<void> {
+    if (!["auto", "vulkan", "cuda", "metal", "cpu"].includes(backend)) {
+        throw new Error(`Unsupported llama.cpp GPU backend: ${String(backend)}`);
+    }
     if (backend === activeBackend) return;
+    const oldModels = [...modelCache.values()];
+    const oldLlama = llamaInstance;
     activeBackend = backend;
+    backendRevision++;
     // A running Llama instance is bound to whichever backend it was created
     // with — switching backends means starting over, and previously loaded
     // model weights are tied to the old instance too.
     llamaInstance = null;
+    llamaInstancePromise = null;
     modelCache.clear();
+    modelLoads.clear();
+    modelLastUsed.clear();
+    activeModelUsers.clear();
+
+    // Native model buffers can outlive their JS references. Explicitly
+    // dispose them so a backend switch returns VRAM before reallocating it.
+    await Promise.allSettled(oldModels.map((model) => model.dispose()));
+    if (oldLlama) await oldLlama.dispose();
 }
 
 async function getLlamaInstance(): Promise<Llama> {
-    if (!llamaInstance) {
+    if (llamaInstance) return llamaInstance;
+    if (llamaInstancePromise) return llamaInstancePromise;
+
+    const revision = backendRevision;
+    const backend = activeBackend;
+    const creation = (async () => {
         const { getLlama } = await loadNodeLlamaCpp();
-        llamaInstance = await getLlama({ gpu: activeBackend === "cpu" ? false : activeBackend });
+        const instance = await getLlama({ gpu: backend === "cpu" ? false : backend });
+        // A backend change may happen while native initialization is still
+        // running. Never publish an instance created for the stale backend.
+        if (revision !== backendRevision) {
+            await instance.dispose();
+            return getLlamaInstance();
+        }
+        llamaInstance = instance;
+        return instance;
+    })();
+    llamaInstancePromise = creation;
+    try {
+        return await creation;
+    } finally {
+        if (llamaInstancePromise === creation) llamaInstancePromise = null;
     }
-    return llamaInstance;
 }
 
 export async function getAvailableGpuBackends(): Promise<string[]> {
@@ -63,12 +106,63 @@ export async function getAvailableGpuBackends(): Promise<string[]> {
 }
 
 async function loadModel(modelPath: string, gpuLayers?: number): Promise<LlamaModel> {
-    const cached = modelCache.get(modelPath);
-    if (cached) return cached;
-    const llama = await getLlamaInstance();
-    const model = await llama.loadModel({ modelPath, gpuLayers: gpuLayers ?? "auto" });
-    modelCache.set(modelPath, model);
-    return model;
+    const key = modelCacheKey(modelPath, gpuLayers);
+    const cached = modelCache.get(key);
+    if (cached) {
+        modelLastUsed.set(key, Date.now());
+        return cached;
+    }
+    const pending = modelLoads.get(key);
+    if (pending) return pending;
+
+    // Coalesce simultaneous first requests. Loading the same weights twice
+    // can briefly double RAM/VRAM use and OOM an otherwise suitable GPU.
+    const revision = backendRevision;
+    const load = (async () => {
+        const llama = await getLlamaInstance();
+        const model = await llama.loadModel({ modelPath, gpuLayers: gpuLayers ?? "auto" });
+        if (revision !== backendRevision) {
+            await model.dispose();
+            throw new Error("The GPU backend changed while the model was loading. Please retry the request.");
+        }
+        modelCache.set(key, model);
+        modelLastUsed.set(key, Date.now());
+        await evictIdleModels(key);
+        return model;
+    })();
+    modelLoads.set(key, load);
+    try {
+        return await load;
+    } finally {
+        if (modelLoads.get(key) === load) modelLoads.delete(key);
+    }
+}
+
+async function evictIdleModels(protectedKey?: string): Promise<void> {
+    while (modelCache.size > MAX_CACHED_MODELS) {
+        const candidate = [...modelCache.keys()]
+            .filter((key) => key !== protectedKey && (activeModelUsers.get(key) ?? 0) === 0)
+            .sort((a, b) => (modelLastUsed.get(a) ?? 0) - (modelLastUsed.get(b) ?? 0))[0];
+        if (!candidate) return;
+        const model = modelCache.get(candidate);
+        modelCache.delete(candidate);
+        modelLastUsed.delete(candidate);
+        if (model) await model.dispose();
+    }
+}
+
+export async function dispose(): Promise<void> {
+    backendRevision++;
+    const models = [...modelCache.values()];
+    const llama = llamaInstance;
+    modelCache.clear();
+    modelLoads.clear();
+    modelLastUsed.clear();
+    activeModelUsers.clear();
+    llamaInstance = null;
+    llamaInstancePromise = null;
+    await Promise.allSettled(models.map((model) => model.dispose()));
+    if (llama) await llama.dispose();
 }
 
 export interface LocalGgufModel {
@@ -92,7 +186,7 @@ export function listModels(modelsDir: string): LocalGgufModel[] {
 // activity/resource usage view. Doesn't report VRAM/RAM footprint since
 // node-llama-cpp doesn't expose per-model memory usage.
 export function listLoadedModels(): string[] {
-    return [...modelCache.keys()];
+    return [...new Set([...modelCache.keys()].map((key) => key.split("\0", 1)[0]))];
 }
 
 export function deleteModel(modelsDir: string, name: string): void {
@@ -102,7 +196,13 @@ export function deleteModel(modelsDir: string, name: string): void {
         throw new Error("Invalid model file name.");
     }
     fs.rmSync(target, { force: true });
-    modelCache.delete(target);
+    for (const [key, model] of modelCache) {
+        if (key.startsWith(`${target}\0`)) {
+            modelCache.delete(key);
+            modelLastUsed.delete(key);
+            void model.dispose();
+        }
+    }
 }
 
 // Maps this app's provider-agnostic ChatMessage[] (system/user/assistant,
@@ -144,7 +244,10 @@ export async function chat(
     }
     if (lastUserIndex === -1) throw new Error("No user message to respond to.");
 
+    const cacheKey = modelCacheKey(modelPath, options?.gpuLayers);
     const model = await loadModel(modelPath, options?.gpuLayers);
+    activeModelUsers.set(cacheKey, (activeModelUsers.get(cacheKey) ?? 0) + 1);
+    modelLastUsed.set(cacheKey, Date.now());
     // A fresh context per call re-evaluates the whole conversation history
     // every turn instead of reusing a warm KV cache across turns — simpler
     // and always correct, at the cost of redoing prompt-processing work on
@@ -152,9 +255,10 @@ export async function chat(
     // across turns of the same conversation) would fix that but needs a
     // stable conversation identity to key off of, which isn't threaded
     // through this call today.
-    const { LlamaChatSession } = await loadNodeLlamaCpp();
-    const context = await model.createContext({ contextSize: options?.contextLength });
+    let context: Awaited<ReturnType<LlamaModel["createContext"]>> | null = null;
     try {
+        const { LlamaChatSession } = await loadNodeLlamaCpp();
+        context = await model.createContext({ contextSize: options?.contextLength });
         const sequence = context.getSequence();
         const priorMessages = messages.slice(0, lastUserIndex);
         const session = new LlamaChatSession({ contextSequence: sequence });
@@ -172,6 +276,11 @@ export async function chat(
         });
         onToken({ done: true });
     } finally {
-        await context.dispose();
+        if (context) await context.dispose();
+        const users = Math.max(0, (activeModelUsers.get(cacheKey) ?? 1) - 1);
+        if (users === 0) activeModelUsers.delete(cacheKey);
+        else activeModelUsers.set(cacheKey, users);
+        modelLastUsed.set(cacheKey, Date.now());
+        await evictIdleModels();
     }
 }

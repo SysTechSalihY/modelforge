@@ -27,6 +27,9 @@ export interface CustomProviderConfig {
     // "https://api.groq.com/openai/v1" — "/chat/completions" is appended.
     baseUrl: string;
     modelIds: string[];
+    // Local GPU runtimes such as vLLM, LocalAI, TGI, or custom llama-server
+    // builds commonly expose an unauthenticated OpenAI-compatible endpoint.
+    localGpuBackend?: boolean;
 }
 
 export interface AppSettings {

@@ -5,6 +5,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "./providers/types";
+import { getAccountToken } from "./accounts";
 
 const execAsync = promisify(exec);
 
@@ -16,6 +17,8 @@ export const AGENT_TOOLS: ToolDefinition[] = [
             type: "object",
             properties: {
                 path: { type: "string", description: "File path, relative to the workspace root." },
+                start_line: { type: "number", description: "Optional 1-based first line to read." },
+                end_line: { type: "number", description: "Optional 1-based last line to read (inclusive)." },
             },
             required: ["path"],
         },
@@ -30,6 +33,74 @@ export const AGENT_TOOLS: ToolDefinition[] = [
                 content: { type: "string", description: "The full content to write to the file." },
             },
             required: ["path", "content"],
+        },
+    },
+    {
+        name: "replace_in_file",
+        description: "Replace one exact block of text in a file. Safer and more token-efficient than rewriting the whole file; fails if the text is missing or ambiguous.",
+        parameters: {
+            type: "object",
+            properties: {
+                path: { type: "string", description: "File path, relative to the workspace root." },
+                old_text: { type: "string", description: "Exact text currently in the file." },
+                new_text: { type: "string", description: "Replacement text." },
+                replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring exactly one." },
+            },
+            required: ["path", "old_text", "new_text"],
+        },
+    },
+    {
+        name: "find_files",
+        description: "Find files by a glob-style pattern such as **/*.ts or src/*.tsx. Skips generated and dependency directories.",
+        parameters: {
+            type: "object",
+            properties: {
+                pattern: { type: "string", description: "Glob-style path pattern relative to the search directory." },
+                path: { type: "string", description: 'Search directory relative to the workspace root. Defaults to ".".' },
+            },
+            required: ["pattern"],
+        },
+    },
+    {
+        name: "file_info",
+        description: "Get a file or directory's type, size, and modification time.",
+        parameters: {
+            type: "object",
+            properties: { path: { type: "string", description: "Path relative to the workspace root." } },
+            required: ["path"],
+        },
+    },
+    {
+        name: "make_directory",
+        description: "Create a directory and any missing parent directories within the workspace.",
+        parameters: {
+            type: "object",
+            properties: { path: { type: "string", description: "Directory path relative to the workspace root." } },
+            required: ["path"],
+        },
+    },
+    {
+        name: "move_path",
+        description: "Move or rename a file or directory within the workspace. Refuses to overwrite an existing destination.",
+        parameters: {
+            type: "object",
+            properties: {
+                source: { type: "string", description: "Existing source path relative to the workspace root." },
+                destination: { type: "string", description: "New destination path relative to the workspace root." },
+            },
+            required: ["source", "destination"],
+        },
+    },
+    {
+        name: "delete_path",
+        description: "Delete a file or an empty directory within the workspace. Set recursive=true only when explicitly asked to delete a non-empty directory.",
+        parameters: {
+            type: "object",
+            properties: {
+                path: { type: "string", description: "Path relative to the workspace root." },
+                recursive: { type: "boolean", description: "Allow deleting a non-empty directory tree." },
+            },
+            required: ["path"],
         },
     },
     {
@@ -133,6 +204,43 @@ export const AGENT_TOOLS: ToolDefinition[] = [
         },
     },
     {
+        name: "github_list_repositories",
+        description: "List repositories accessible to the linked GitHub account. Use this to choose a repository for analysis.",
+        parameters: {
+            type: "object",
+            properties: {
+                visibility: { type: "string", enum: ["all", "public", "private"], description: "Repository visibility filter. Defaults to all." },
+                limit: { type: "number", description: "Maximum repositories to return, from 1 to 100. Defaults to 30." },
+            },
+            required: [],
+        },
+    },
+    {
+        name: "github_repository_tree",
+        description: "List the complete file tree of a GitHub repository so its structure can be analyzed before reading selected files.",
+        parameters: {
+            type: "object",
+            properties: {
+                repository: { type: "string", description: "Repository in owner/name form." },
+                ref: { type: "string", description: "Branch, tag, or commit. Defaults to the repository's default branch." },
+            },
+            required: ["repository"],
+        },
+    },
+    {
+        name: "github_read_file",
+        description: "Read a UTF-8 text file from a repository accessible to the linked GitHub account.",
+        parameters: {
+            type: "object",
+            properties: {
+                repository: { type: "string", description: "Repository in owner/name form." },
+                path: { type: "string", description: "File path inside the repository." },
+                ref: { type: "string", description: "Branch, tag, or commit. Defaults to the default branch." },
+            },
+            required: ["repository", "path"],
+        },
+    },
+    {
         name: "fetch_url",
         description: "Fetch a web page by URL and return its readable text content (HTML tags stripped). Use after web_search to read a specific result, or for any URL the user provides.",
         parameters: {
@@ -211,17 +319,44 @@ const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "r
 function resolveSafePath(workspaceRoot: string, relativePath: string): string {
     const root = path.resolve(workspaceRoot);
     const resolved = path.resolve(root, relativePath || ".");
-    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    const isWithin = (parent: string, child: string): boolean => {
+        const relative = path.relative(parent, child);
+        return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+    };
+    if (!isWithin(root, resolved)) {
         throw new Error(`Path "${relativePath}" is outside the workspace directory.`);
+    }
+
+    // Lexical checks alone are bypassable through a symlink inside the
+    // workspace that points elsewhere. Resolve the target, or its nearest
+    // existing parent for new files, and verify the real path too.
+    const realRoot = fs.realpathSync(root);
+    let existing = resolved;
+    while (!fs.existsSync(existing)) {
+        const parent = path.dirname(existing);
+        if (parent === existing) break;
+        existing = parent;
+    }
+    const realExisting = fs.realpathSync(existing);
+    if (!isWithin(realRoot, realExisting)) {
+        throw new Error(`Path "${relativePath}" resolves outside the workspace directory through a symbolic link.`);
     }
     return resolved;
 }
 
-export function readFile(workspaceRoot: string, relativePath: string): string {
+export function readFile(workspaceRoot: string, relativePath: string, startLine?: number, endLine?: number): string {
     const target = resolveSafePath(workspaceRoot, relativePath);
     const stat = fs.statSync(target);
     if (stat.isDirectory()) throw new Error(`"${relativePath}" is a directory, not a file.`);
     const content = fs.readFileSync(target, "utf-8");
+    if (startLine !== undefined || endLine !== undefined) {
+        const start = Math.max(1, Math.floor(startLine ?? 1));
+        const end = Math.max(start, Math.floor(endLine ?? start + 499));
+        if (end - start > 2_000) throw new Error("A ranged read is limited to 2,001 lines at a time.");
+        const lines = content.split(/\r?\n/);
+        if (start > lines.length) throw new Error(`start_line ${start} is beyond the file's ${lines.length} lines.`);
+        return lines.slice(start - 1, Math.min(end, lines.length)).join("\n");
+    }
     return content.length > MAX_READ_CHARS
         ? `${content.slice(0, MAX_READ_CHARS)}\n\n[truncated — file is ${content.length} characters]`
         : content;
@@ -266,6 +401,27 @@ export function writeFile(workspaceRoot: string, relativePath: string, content: 
     return { bytesWritten: Buffer.byteLength(content) };
 }
 
+export function replaceInFile(
+    workspaceRoot: string,
+    relativePath: string,
+    oldText: string,
+    newText: string,
+    replaceAll = false
+): { replacements: number; bytesWritten: number } {
+    if (!oldText) throw new Error("old_text must not be empty.");
+    const target = resolveSafePath(workspaceRoot, relativePath);
+    const content = fs.readFileSync(target, "utf-8");
+    const occurrences = content.split(oldText).length - 1;
+    if (occurrences === 0) throw new Error("old_text was not found in the file.");
+    if (!replaceAll && occurrences !== 1) {
+        throw new Error(`old_text matched ${occurrences} times; provide a unique block or set replace_all=true.`);
+    }
+    const updated = replaceAll ? content.split(oldText).join(newText) : content.replace(oldText, newText);
+    recordBackup(workspaceRoot, relativePath, content);
+    fs.writeFileSync(target, updated);
+    return { replacements: replaceAll ? occurrences : 1, bytesWritten: Buffer.byteLength(updated) };
+}
+
 export interface RollbackResult {
     path: string;
     restoredContent: boolean; // true = previous content restored, false = newly-created file was deleted
@@ -290,6 +446,90 @@ export function listDir(workspaceRoot: string, relativePath: string): string[] {
     const target = resolveSafePath(workspaceRoot, relativePath || ".");
     const entries = fs.readdirSync(target, { withFileTypes: true });
     return entries.slice(0, MAX_LIST_ENTRIES).map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
+}
+
+function globToRegExp(pattern: string): RegExp {
+    const normalized = pattern.replace(/\\/g, "/");
+    let source = "^";
+    for (let i = 0; i < normalized.length; i++) {
+        const char = normalized[i];
+        if (char === "*" && normalized[i + 1] === "*") {
+            i++;
+            if (normalized[i + 1] === "/") {
+                i++;
+                source += "(?:.*/)?";
+            } else {
+                source += ".*";
+            }
+        } else if (char === "*") source += "[^/]*";
+        else if (char === "?") source += "[^/]";
+        else source += char.replace(/[\\^$.[\]|()+{}]/g, "\\$&");
+    }
+    return new RegExp(`${source}$`, "i");
+}
+
+export function findFiles(workspaceRoot: string, pattern: string, relativePath = "."): string[] {
+    if (!pattern.trim()) throw new Error("pattern must not be empty.");
+    const startDir = resolveSafePath(workspaceRoot, relativePath);
+    const matcher = globToRegExp(pattern);
+    const results: string[] = [];
+    function walk(dir: string): void {
+        if (results.length >= MAX_LIST_ENTRIES) return;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name)) continue;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) walk(full);
+            else if (entry.isFile()) {
+                const relative = path.relative(startDir, full).split(path.sep).join("/");
+                if (matcher.test(relative)) results.push(path.relative(workspaceRoot, full).split(path.sep).join("/"));
+            }
+        }
+    }
+    walk(startDir);
+    return results.sort();
+}
+
+export function fileInfo(workspaceRoot: string, relativePath: string): {
+    path: string; type: "file" | "directory" | "other"; sizeBytes: number; modifiedAt: string;
+} {
+    const target = resolveSafePath(workspaceRoot, relativePath);
+    const stat = fs.statSync(target);
+    return {
+        path: relativePath,
+        type: stat.isFile() ? "file" : stat.isDirectory() ? "directory" : "other",
+        sizeBytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+    };
+}
+
+export function makeDirectory(workspaceRoot: string, relativePath: string): { created: boolean } {
+    const target = resolveSafePath(workspaceRoot, relativePath);
+    const existed = fs.existsSync(target);
+    fs.mkdirSync(target, { recursive: true });
+    return { created: !existed };
+}
+
+export function movePath(workspaceRoot: string, sourcePath: string, destinationPath: string): { moved: boolean } {
+    const root = path.resolve(workspaceRoot);
+    const source = resolveSafePath(workspaceRoot, sourcePath);
+    const destination = resolveSafePath(workspaceRoot, destinationPath);
+    if (source === root || destination === root) throw new Error("The workspace root cannot be moved or replaced.");
+    if (!fs.existsSync(source)) throw new Error(`Source path "${sourcePath}" does not exist.`);
+    if (fs.existsSync(destination)) throw new Error(`Destination path "${destinationPath}" already exists.`);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.renameSync(source, destination);
+    return { moved: true };
+}
+
+export function deletePath(workspaceRoot: string, relativePath: string, recursive = false): { deleted: boolean } {
+    const root = path.resolve(workspaceRoot);
+    const target = resolveSafePath(workspaceRoot, relativePath);
+    if (target === root) throw new Error("The workspace root cannot be deleted.");
+    if (!fs.existsSync(target)) return { deleted: false };
+    const stat = fs.statSync(target);
+    if (stat.isDirectory()) fs.rmSync(target, { recursive, force: false });
+    else fs.unlinkSync(target);
+    return { deleted: true };
 }
 
 export interface SearchMatch {
@@ -590,12 +830,113 @@ export function detectProjectScripts(workspaceRoot: string): ProjectScripts {
     };
 }
 
+function requireGitHubToken(): string {
+    const token = getAccountToken("github");
+    if (!token) throw new Error("Link a GitHub account in Settings → Integrations before using GitHub repository tools.");
+    return token;
+}
+
+function normalizeGitHubRepository(repository: string): string {
+    const value = repository.trim();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
+        throw new Error('repository must use the "owner/name" format.');
+    }
+    return value;
+}
+
+async function githubApi<T>(endpoint: string): Promise<T> {
+    const response = await fetch(`https://api.github.com${endpoint}`, {
+        headers: {
+            Authorization: `Bearer ${requireGitHubToken()}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2026-03-10",
+            "User-Agent": "Modelforge",
+        },
+    });
+    if (response.status === 401) throw new Error("The linked GitHub token is invalid or expired. Reconnect it in Settings.");
+    if (response.status === 404) throw new Error("The repository, ref, or file was not found, or the linked account cannot access it.");
+    if (!response.ok) throw new Error(`GitHub API error (HTTP ${response.status}).`);
+    return await response.json() as T;
+}
+
+export async function githubListRepositories(visibility = "all", limit = 30): Promise<unknown[]> {
+    const safeVisibility = ["all", "public", "private"].includes(visibility) ? visibility : "all";
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 100));
+    const repos = await githubApi<Array<Record<string, unknown>>>(
+        `/user/repos?visibility=${safeVisibility}&affiliation=owner,collaborator,organization_member&sort=updated&per_page=${safeLimit}`
+    );
+    return repos.map((repo) => ({
+        fullName: repo.full_name,
+        private: repo.private,
+        description: repo.description,
+        defaultBranch: repo.default_branch,
+        language: repo.language,
+        updatedAt: repo.updated_at,
+        url: repo.html_url,
+    }));
+}
+
+export async function githubRepositoryTree(repository: string, ref?: string): Promise<{ ref: string; truncated: boolean; files: unknown[] }> {
+    const repo = normalizeGitHubRepository(repository);
+    let resolvedRef = ref?.trim();
+    if (!resolvedRef) {
+        const metadata = await githubApi<{ default_branch: string }>(`/repos/${repo}`);
+        resolvedRef = metadata.default_branch;
+    }
+    const tree = await githubApi<{ truncated: boolean; tree: Array<{ path: string; type: string; size?: number; sha: string }> }>(
+        `/repos/${repo}/git/trees/${encodeURIComponent(resolvedRef)}?recursive=1`
+    );
+    return {
+        ref: resolvedRef,
+        truncated: tree.truncated,
+        files: tree.tree.filter((item) => item.type === "blob").slice(0, 2_000).map((item) => ({ path: item.path, sizeBytes: item.size ?? null, sha: item.sha })),
+    };
+}
+
+export async function githubReadFile(repository: string, filePath: string, ref?: string): Promise<string> {
+    const repo = normalizeGitHubRepository(repository);
+    const cleanPath = filePath.replace(/^\/+/, "");
+    if (!cleanPath || cleanPath.split("/").some((segment) => segment === ".." || segment === "." || !segment)) {
+        throw new Error("Invalid repository file path.");
+    }
+    const encodedPath = cleanPath.split("/").map(encodeURIComponent).join("/");
+    const query = ref?.trim() ? `?ref=${encodeURIComponent(ref.trim())}` : "";
+    const file = await githubApi<{ type: string; size: number; encoding?: string; content?: string }>(`/repos/${repo}/contents/${encodedPath}${query}`);
+    if (file.type !== "file" || file.encoding !== "base64" || !file.content) throw new Error("The requested GitHub path is not a readable file.");
+    if (file.size > MAX_READ_CHARS * 4) throw new Error(`The GitHub file is too large to analyze directly (${file.size} bytes).`);
+    const content = Buffer.from(file.content.replace(/\s/g, ""), "base64").toString("utf-8");
+    return content.length > MAX_READ_CHARS ? `${content.slice(0, MAX_READ_CHARS)}\n\n[truncated]` : content;
+}
+
 export async function executeTool(workspaceRoot: string, name: string, args: Record<string, unknown>): Promise<unknown> {
     switch (name) {
         case "read_file":
-            return readFile(workspaceRoot, String(args.path ?? ""));
+            return readFile(
+                workspaceRoot,
+                String(args.path ?? ""),
+                typeof args.start_line === "number" ? args.start_line : undefined,
+                typeof args.end_line === "number" ? args.end_line : undefined
+            );
         case "write_file":
             return writeFile(workspaceRoot, String(args.path ?? ""), String(args.content ?? ""));
+        case "replace_in_file":
+            return replaceInFile(
+                workspaceRoot,
+                String(args.path ?? ""),
+                String(args.old_text ?? ""),
+                String(args.new_text ?? ""),
+                args.replace_all === true
+            );
+        case "find_files":
+            return findFiles(workspaceRoot, String(args.pattern ?? ""), args.path ? String(args.path) : ".");
+        case "file_info":
+            return fileInfo(workspaceRoot, String(args.path ?? ""));
+        case "make_directory":
+            return makeDirectory(workspaceRoot, String(args.path ?? ""));
+        case "move_path":
+            return movePath(workspaceRoot, String(args.source ?? ""), String(args.destination ?? ""));
+        case "delete_path":
+            return deletePath(workspaceRoot, String(args.path ?? ""), args.recursive === true);
         case "list_dir":
             return listDir(workspaceRoot, String(args.path ?? "."));
         case "search_files":
@@ -616,6 +957,12 @@ export async function executeTool(workspaceRoot: string, name: string, args: Rec
             return gitCommit(workspaceRoot, String(args.message ?? ""));
         case "web_search":
             return webSearch(String(args.query ?? ""));
+        case "github_list_repositories":
+            return githubListRepositories(String(args.visibility ?? "all"), typeof args.limit === "number" ? args.limit : 30);
+        case "github_repository_tree":
+            return githubRepositoryTree(String(args.repository ?? ""), args.ref ? String(args.ref) : undefined);
+        case "github_read_file":
+            return githubReadFile(String(args.repository ?? ""), String(args.path ?? ""), args.ref ? String(args.ref) : undefined);
         case "fetch_url":
             return fetchUrl(String(args.url ?? ""));
         case "read_notes":

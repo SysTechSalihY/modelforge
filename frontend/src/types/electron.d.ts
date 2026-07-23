@@ -185,6 +185,14 @@ export interface HfDownloadProgress {
   totalBytes: number | null;
 }
 
+export interface LinkedAccount {
+  provider: "github" | "huggingface";
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string;
+}
+
 export interface AppSettings {
   defaultModel: string | null;
   ollamaHost: string;
@@ -320,6 +328,7 @@ export interface CustomProviderConfig {
   name: string;
   baseUrl: string;
   modelIds: string[];
+  localGpuBackend?: boolean;
 }
 
 export interface LocalGgufModel {
@@ -419,6 +428,11 @@ export interface ElectronApi {
   secrets: {
     has: (key: string) => Promise<boolean>;
     set: (key: string, value: string) => Promise<void>;
+  };
+  accounts: {
+    status: (provider: "github" | "huggingface") => Promise<LinkedAccount | null>;
+    connect: (provider: "github" | "huggingface", token: string) => Promise<LinkedAccount>;
+    disconnect: (provider: "github" | "huggingface") => Promise<void>;
   };
   audio: {
     transcribe: (audioBase64: string, mimeType: string) => Promise<{ text?: string; error?: string }>;
