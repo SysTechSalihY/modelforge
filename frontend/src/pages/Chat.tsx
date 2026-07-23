@@ -35,6 +35,7 @@ import {
     Circle,
     ListChecks,
     ShieldQuestion,
+    AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +68,7 @@ import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
 import { ScreenshotPickerDialog } from "@/components/screenshot-picker-dialog";
 import { speakText, stopSpeaking } from "@/lib/tts";
 import { computeLineDiff } from "@/lib/diff";
+import { useToast } from "@/components/toast";
 import type {
     ChatMessage,
     OllamaModel,
@@ -369,8 +371,10 @@ export default function Chat() {
     const navigate = useNavigate();
     const { sessions, projects, loading, hasApi, createSession, refresh } = useSessions();
     const { t } = useI18n();
+    const toast = useToast();
 
     const [models, setModels] = useState<OllamaModel[]>([]);
+    const [ollamaRunning, setOllamaRunning] = useState<boolean | null>(null);
     const [llamaCppModels, setLlamaCppModels] = useState<LocalGgufModel[]>([]);
     const [model, setModel] = useState<string>("");
     const [pendingCustomProvider, setPendingCustomProvider] = useState<ProviderId | null>(null);
@@ -467,6 +471,14 @@ export default function Chat() {
             }
         })();
     }, [agentWorkspace, pendingToolCalls, writeDiffPreviews]);
+
+    // Only checked while an Ollama model is selected — the banner's render
+    // condition also gates on the provider, so a stale value from a previous
+    // Ollama selection can never show for a cloud model.
+    useEffect(() => {
+        if (!hasApi || parseModelRef(model)?.provider !== "ollama") return;
+        window.api.ollama.status().then(setOllamaRunning);
+    }, [hasApi, model]);
 
     useEffect(() => {
         if (!hasApi || !sessionId) return;
@@ -801,7 +813,20 @@ export default function Chat() {
     async function handleCopyChatMarkdown() {
         if (!sessionId) return;
         const markdown = await window.api.data.getSessionMarkdown(sessionId);
-        if (markdown) await navigator.clipboard.writeText(markdown);
+        if (markdown) {
+            await navigator.clipboard.writeText(markdown);
+            toast.success(t.copiedAsMarkdown);
+        }
+    }
+
+    async function startOllamaFromBanner() {
+        const result = await window.api.ollama.start();
+        setOllamaRunning(!result.error);
+        if (result.error === "not-installed") {
+            toast.error(t.toastOllamaNotInstalled);
+        } else if (result.error) {
+            toast.error(`${t.toastOllamaStartFailed}: ${result.error}`);
+        }
     }
 
     async function runCompletion(
@@ -1698,6 +1723,16 @@ export default function Chat() {
                     </PopoverContent>
                 </Popover>
             </div>
+
+            {parsedModel?.provider === "ollama" && ollamaRunning === false && (
+                <div className="flex items-center gap-2 border-b border-border bg-destructive/5 px-4 py-2 text-xs">
+                    <AlertTriangle className="size-3.5 shrink-0 text-destructive" />
+                    <span className="flex-1">{t.ollamaOfflineBanner}</span>
+                    <Button size="sm" variant="outline" onClick={startOllamaFromBanner}>
+                        {t.start}
+                    </Button>
+                </div>
+            )}
 
             {planSteps.length > 0 && (
                 <div className="border-b border-border bg-muted/30 px-4 py-2">

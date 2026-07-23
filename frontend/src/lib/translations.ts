@@ -268,6 +268,15 @@ export interface Dictionary {
     recordShortcut: string;
     reset: string;
     keybindingConflict: string;
+    toastApiKeySaved: string;
+    toastApiKeyCleared: string;
+    toastProviderAdded: string;
+    toastProviderRemoved: string;
+    toastExportDone: string;
+    toastOllamaNotInstalled: string;
+    toastOllamaStartFailed: string;
+    copiedAsMarkdown: string;
+    ollamaOfflineBanner: string;
     copied: string;
     openLogsFolder: string;
     checkForUpdates: string;
@@ -557,6 +566,15 @@ export const en: Dictionary = {
     recordShortcut: "Record shortcut",
     reset: "Reset",
     keybindingConflict: "{key} is already used by another shortcut.",
+    toastApiKeySaved: "API key saved",
+    toastApiKeyCleared: "API key removed",
+    toastProviderAdded: "provider added",
+    toastProviderRemoved: "Provider removed",
+    toastExportDone: "Export complete",
+    toastOllamaNotInstalled: "Ollama isn't installed — download it from ollama.com to run local models.",
+    toastOllamaStartFailed: "Couldn't start Ollama",
+    copiedAsMarkdown: "Conversation copied as Markdown",
+    ollamaOfflineBanner: "Ollama isn't running — this model won't respond until it's started.",
     copyDiagnosticInfo: "Copy diagnostic info",
     copied: "Copied",
     openLogsFolder: "Open logs folder",
@@ -856,6 +874,15 @@ export const tr: Dictionary = {
     recordShortcut: "Kısayolu kaydet",
     reset: "Sıfırla",
     keybindingConflict: "{key} zaten başka bir kısayol tarafından kullanılıyor.",
+    toastApiKeySaved: "API anahtarı kaydedildi",
+    toastApiKeyCleared: "API anahtarı kaldırıldı",
+    toastProviderAdded: "sağlayıcı eklendi",
+    toastProviderRemoved: "Sağlayıcı kaldırıldı",
+    toastExportDone: "Dışa aktarma tamamlandı",
+    toastOllamaNotInstalled: "Ollama kurulu değil — yerel modeller çalıştırmak için ollama.com adresinden indirin.",
+    toastOllamaStartFailed: "Ollama başlatılamadı",
+    copiedAsMarkdown: "Sohbet Markdown olarak kopyalandı",
+    ollamaOfflineBanner: "Ollama çalışmıyor — başlatılana kadar bu model yanıt vermeyecek.",
     copied: "Kopyalandı",
     openLogsFolder: "Günlük klasörünü aç",
     checkForUpdates: "Güncellemeleri denetle",

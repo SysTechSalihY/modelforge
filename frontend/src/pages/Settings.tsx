@@ -64,6 +64,7 @@ import type {
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
 import { recommendGpuBackend, gpuBackendNote } from "@/lib/gpu";
+import { useToast } from "@/components/toast";
 import {
     DEFAULT_KEYBINDINGS,
     KEYBINDING_ACTIONS,
@@ -162,6 +163,7 @@ export default function Settings() {
     const [editDraftName, setEditDraftName] = useState("");
     const [editDraftPrompt, setEditDraftPrompt] = useState("");
     const { refresh: refreshSessions } = useSessions();
+    const toast = useToast();
     const activePullCount = useRef(0);
 
     const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpServerStatus>>({});
@@ -336,7 +338,8 @@ export default function Settings() {
     }
 
     async function handleExportAll() {
-        await window.api.data.exportAll();
+        const result = await window.api.data.exportAll();
+        if (result.success) toast.success(t.toastExportDone);
     }
 
     async function handleImport() {
@@ -432,27 +435,35 @@ export default function Settings() {
     }
 
     async function saveOpenaiKey() {
-        await window.api.secrets.set("openai_api_key", openaiKeyInput.trim());
-        setOpenaiKeySet(!!openaiKeyInput.trim());
+        const value = openaiKeyInput.trim();
+        await window.api.secrets.set("openai_api_key", value);
+        setOpenaiKeySet(!!value);
         setOpenaiKeyInput("");
+        toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
     async function saveAnthropicKey() {
-        await window.api.secrets.set("anthropic_api_key", anthropicKeyInput.trim());
-        setAnthropicKeySet(!!anthropicKeyInput.trim());
+        const value = anthropicKeyInput.trim();
+        await window.api.secrets.set("anthropic_api_key", value);
+        setAnthropicKeySet(!!value);
         setAnthropicKeyInput("");
+        toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
     async function saveFigmaToken() {
-        await window.api.secrets.set("figma_token", figmaTokenInput.trim());
-        setFigmaTokenSet(!!figmaTokenInput.trim());
+        const value = figmaTokenInput.trim();
+        await window.api.secrets.set("figma_token", value);
+        setFigmaTokenSet(!!value);
         setFigmaTokenInput("");
+        toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
     async function saveGeminiKey() {
-        await window.api.secrets.set("gemini_api_key", geminiKeyInput.trim());
-        setGeminiKeySet(!!geminiKeyInput.trim());
+        const value = geminiKeyInput.trim();
+        await window.api.secrets.set("gemini_api_key", value);
+        setGeminiKeySet(!!value);
         setGeminiKeyInput("");
+        toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
     function prefillCustomProviderPreset(preset: { name: string; baseUrl: string; modelIds: string[] }) {
@@ -480,6 +491,7 @@ export default function Settings() {
         setCustomDraftBaseUrl("");
         setCustomDraftModelIds("");
         setShowAddCustomProvider(false);
+        toast.success(`${name} — ${t.toastProviderAdded}`);
     }
 
     async function removeCustomProvider(id: string) {
@@ -488,6 +500,7 @@ export default function Settings() {
             customProviders: (settings.customProviders ?? []).filter((p) => p.id !== id),
         });
         setSettings(updated);
+        toast.success(t.toastProviderRemoved);
     }
 
     async function saveCustomProviderKey(id: string) {
@@ -495,6 +508,7 @@ export default function Settings() {
         await window.api.secrets.set(`custom_${id}_api_key`, value);
         setCustomKeySet((prev) => ({ ...prev, [id]: !!value }));
         setCustomKeyInputs((prev) => ({ ...prev, [id]: "" }));
+        toast.success(value ? t.toastApiKeySaved : t.toastApiKeyCleared);
     }
 
     async function saveOllamaHost() {
@@ -546,6 +560,11 @@ export default function Settings() {
         } else {
             const result = await window.api.ollama.start();
             setRunning(!result.error);
+            if (result.error === "not-installed") {
+                toast.error(t.toastOllamaNotInstalled);
+            } else if (result.error) {
+                toast.error(`${t.toastOllamaStartFailed}: ${result.error}`);
+            }
         }
     }
 

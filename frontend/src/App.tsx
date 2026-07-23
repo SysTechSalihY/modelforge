@@ -5,6 +5,7 @@ import Settings from "./pages/Settings";
 import Compare from "./pages/Compare";
 import UsageDashboard from "./pages/UsageDashboard";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ToastProvider } from "@/components/toast";
 import { SessionsProvider } from "@/lib/sessions-context";
 import { I18nProvider } from "@/lib/i18n";
 
@@ -26,9 +27,11 @@ function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="app-ui-theme">
       <I18nProvider>
-        <SessionsProvider>
-          <RouterProvider router={router} />
-        </SessionsProvider>
+        <ToastProvider>
+          <SessionsProvider>
+            <RouterProvider router={router} />
+          </SessionsProvider>
+        </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
   );
