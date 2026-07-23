@@ -363,6 +363,9 @@ function registerIpcHandlers(): void {
     ipcMain.handle("settings:save", (_event: IpcMainInvokeEvent, partial) => {
         const saved = settingsStore.saveSettings(partial);
         if (partial.ollamaHost !== undefined) ollama.setHost(saved.ollamaHost);
+        if (partial.keybindings !== undefined) {
+            setupMenu(() => mainWindow, () => checkForUpdatesManually(() => mainWindow), saved.keybindings);
+        }
         return saved;
     });
 
@@ -700,7 +703,7 @@ async function connectEnabledMcpServers(): Promise<void> {
 
 app.whenReady().then(async () => {
     registerIpcHandlers();
-    setupMenu(() => mainWindow, () => checkForUpdatesManually(() => mainWindow));
+    setupMenu(() => mainWindow, () => checkForUpdatesManually(() => mainWindow), settingsStore.getSettings().keybindings);
     createWindow();
     ollama.setHost(settingsStore.getSettings().ollamaHost);
     ollama.setModelsDir(settingsStore.getSettings().modelsDir);

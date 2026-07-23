@@ -244,6 +244,12 @@ export interface Dictionary {
     tools: string;
     noneConnected: string;
     appMemoryUsage: string;
+    keybindings: string;
+    keybindingsDescription: string;
+    pressAKey: string;
+    recordShortcut: string;
+    reset: string;
+    keybindingConflict: string;
     copied: string;
     openLogsFolder: string;
     checkForUpdates: string;
@@ -508,6 +514,12 @@ export const en: Dictionary = {
     tools: "tools",
     noneConnected: "None connected",
     appMemoryUsage: "App memory usage",
+    keybindings: "Keybindings",
+    keybindingsDescription: "Rebind the app's global shortcuts to whatever combo you'd rather use.",
+    pressAKey: "Press a key combo… (Esc to cancel)",
+    recordShortcut: "Record shortcut",
+    reset: "Reset",
+    keybindingConflict: "{key} is already used by another shortcut.",
     copyDiagnosticInfo: "Copy diagnostic info",
     copied: "Copied",
     openLogsFolder: "Open logs folder",
@@ -782,6 +794,12 @@ export const tr: Dictionary = {
     tools: "araç",
     noneConnected: "Bağlı yok",
     appMemoryUsage: "Uygulama bellek kullanımı",
+    keybindings: "Kısayol tuşları",
+    keybindingsDescription: "Uygulamanın genel kısayollarını istediğiniz tuş kombinasyonuna yeniden atayın.",
+    pressAKey: "Bir tuş kombinasyonuna basın… (İptal için Esc)",
+    recordShortcut: "Kısayolu kaydet",
+    reset: "Sıfırla",
+    keybindingConflict: "{key} zaten başka bir kısayol tarafından kullanılıyor.",
     copied: "Kopyalandı",
     openLogsFolder: "Günlük klasörünü aç",
     checkForUpdates: "Güncellemeleri denetle",

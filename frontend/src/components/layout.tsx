@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import type { ChatOptions, ChatSession, Project, PromptPreset } from "@/types/electron";
 import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
 import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
+import { DEFAULT_KEYBINDINGS, matchesBinding, subscribeKeybindings, type KeybindingAction } from "@/lib/keybindings";
 
 function SessionRow({
     session,
@@ -515,12 +516,15 @@ export default function Layout() {
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
 
     useEffect(() => {
         if (!hasApi) return;
         window.api.settings.get().then((s) => {
             setShowOnboarding(!s.onboardingComplete);
+            setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings });
         });
+        return subscribeKeybindings(setKeybindings);
     }, [hasApi]);
 
     const query = search.trim().toLowerCase();
@@ -583,21 +587,24 @@ export default function Layout() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasApi]);
 
-    // Ctrl/Cmd+K opens the command palette, Ctrl/Cmd+/ shows the shortcuts
-    // cheat-sheet, both from anywhere in the app.
+    // Command palette and the shortcuts cheat-sheet are renderer-only (no
+    // native menu entry), so they're matched here against the user's
+    // (possibly remapped) bindings rather than a hardcoded key check.
+    // "New chat"/"Settings" are remapped instead by rebuilding the native
+    // menu's accelerator — see app/src/menu.ts — so they're not handled here.
     useEffect(() => {
         function onKeyDown(e: KeyboardEvent) {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+            if (matchesBinding(e, keybindings.commandPalette)) {
                 e.preventDefault();
                 setPaletteOpen((o) => !o);
-            } else if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+            } else if (matchesBinding(e, keybindings.showShortcuts)) {
                 e.preventDefault();
                 setShortcutsOpen((o) => !o);
             }
         }
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, []);
+    }, [keybindings]);
 
     async function handleDelete(e: React.MouseEvent, id: string) {
         e.stopPropagation();
@@ -762,7 +769,7 @@ export default function Layout() {
                 onNavigateSettings={() => navigate("/settings")}
                 onNavigateCompare={() => navigate("/compare")}
             />
-            <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+            <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} keybindings={keybindings} />
             <OnboardingWizard open={showOnboarding} onDone={() => setShowOnboarding(false)} />
         </div>
     );

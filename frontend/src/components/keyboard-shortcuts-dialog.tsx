@@ -1,8 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
-
-const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-const mod = isMac ? "⌘" : "Ctrl";
+import { DEFAULT_KEYBINDINGS, formatBindingForDisplay, type KeybindingAction } from "@/lib/keybindings";
 
 function Shortcut({ label, keys }: { label: string; keys: string[] }) {
     return (
@@ -25,9 +23,11 @@ function Shortcut({ label, keys }: { label: string; keys: string[] }) {
 export function KeyboardShortcutsDialog({
     open,
     onOpenChange,
+    keybindings = DEFAULT_KEYBINDINGS,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    keybindings?: Record<KeybindingAction, string>;
 }) {
     const { t } = useI18n();
 
@@ -39,10 +39,10 @@ export function KeyboardShortcutsDialog({
                     <DialogDescription>{t.keyboardShortcutsHelp}</DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col divide-y divide-border">
-                    <Shortcut label={t.shortcutCommandPalette} keys={[mod, "K"]} />
-                    <Shortcut label={t.shortcutNewChat} keys={[mod, "N"]} />
-                    <Shortcut label={t.shortcutSettings} keys={[mod, ","]} />
-                    <Shortcut label={t.shortcutShowShortcuts} keys={[mod, "/"]} />
+                    <Shortcut label={t.shortcutCommandPalette} keys={[formatBindingForDisplay(keybindings.commandPalette)]} />
+                    <Shortcut label={t.shortcutNewChat} keys={[formatBindingForDisplay(keybindings.newChat)]} />
+                    <Shortcut label={t.shortcutSettings} keys={[formatBindingForDisplay(keybindings.openSettings)]} />
+                    <Shortcut label={t.shortcutShowShortcuts} keys={[formatBindingForDisplay(keybindings.showShortcuts)]} />
                     <Shortcut label={t.shortcutSend} keys={["Enter"]} />
                     <Shortcut label={t.shortcutNewline} keys={["Shift", "Enter"]} />
                     <Shortcut label={t.shortcutStopGenerating} keys={["Esc"]} />

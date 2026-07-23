@@ -210,6 +210,7 @@ export interface AppSettings {
   llamaCppGpuBackend?: "auto" | "vulkan" | "cuda" | "metal" | "cpu";
   customProviders?: CustomProviderConfig[];
   onboardingComplete?: boolean;
+  keybindings?: Record<string, string>;
 }
 
 export interface ChatOptions {

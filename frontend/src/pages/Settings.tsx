@@ -63,6 +63,14 @@ import type {
     AppActivity,
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
+import {
+    DEFAULT_KEYBINDINGS,
+    KEYBINDING_ACTIONS,
+    eventToBindingString,
+    formatBindingForDisplay,
+    notifyKeybindingsChanged,
+    type KeybindingAction,
+} from "@/lib/keybindings";
 import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, CUSTOM_PROVIDER_PRESETS } from "@/lib/providers";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
@@ -140,6 +148,9 @@ export default function Settings() {
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
     const [activity, setActivity] = useState<AppActivity | null>(null);
     const [activityLoading, setActivityLoading] = useState(false);
+    const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
+    const [recordingAction, setRecordingAction] = useState<KeybindingAction | null>(null);
+    const [keybindingConflict, setKeybindingConflict] = useState<string | null>(null);
     const [importMessage, setImportMessage] = useState<string | null>(null);
     const [ollamaHostInput, setOllamaHostInput] = useState("");
     const [modelsDirStatus, setModelsDirStatus] = useState<string | null>(null);
@@ -199,6 +210,7 @@ export default function Settings() {
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
+            setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings } as Record<KeybindingAction, string>);
             for (const provider of s.customProviders ?? []) {
                 window.api.secrets.has(`custom_${provider.id}_api_key`).then((has) =>
                     setCustomKeySet((prev) => ({ ...prev, [provider.id]: has }))
@@ -342,6 +354,56 @@ export default function Settings() {
         await window.api.sessions.clearAll();
         await refreshSessions();
     }
+
+    async function saveKeybindings(next: Record<KeybindingAction, string>) {
+        setKeybindings(next);
+        await window.api.settings.save({ keybindings: next });
+        notifyKeybindingsChanged(next);
+    }
+
+    function withBinding(action: KeybindingAction, binding: string): Record<KeybindingAction, string> {
+        const next = { ...keybindings };
+        next[action] = binding;
+        return next;
+    }
+
+    useEffect(() => {
+        const action = recordingAction;
+        if (!action) return;
+        function onKeyDown(e: KeyboardEvent) {
+            if (!action) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === "Escape") {
+                setRecordingAction(null);
+                return;
+            }
+            const binding = eventToBindingString(e);
+            if (!binding || !binding.includes("+")) return; // require at least one modifier
+            const conflictingAction = KEYBINDING_ACTIONS.find((a) => a !== action && keybindings[a] === binding);
+            if (conflictingAction) {
+                setKeybindingConflict(binding);
+                return;
+            }
+            setKeybindingConflict(null);
+            saveKeybindings(withBinding(action, binding));
+            setRecordingAction(null);
+        }
+        window.addEventListener("keydown", onKeyDown, true);
+        return () => window.removeEventListener("keydown", onKeyDown, true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recordingAction, keybindings]);
+
+    function resetKeybinding(action: KeybindingAction) {
+        saveKeybindings(withBinding(action, DEFAULT_KEYBINDINGS[action]));
+    }
+
+    const keybindingLabels: Record<KeybindingAction, string> = {
+        commandPalette: t.shortcutCommandPalette,
+        newChat: t.shortcutNewChat,
+        openSettings: t.shortcutSettings,
+        showShortcuts: t.shortcutShowShortcuts,
+    };
 
     async function refreshActivity() {
         setActivityLoading(true);
@@ -911,6 +973,40 @@ export default function Settings() {
                                     </SelectContent>
                                 </Select>
                             </SettingsRow>
+                        </SettingsSection>
+
+                        <SettingsSection title={t.keybindings} description={t.keybindingsDescription} className="mt-8">
+                            {KEYBINDING_ACTIONS.map((action) => (
+                                <SettingsRow key={action} label={keybindingLabels[action]}>
+                                    {recordingAction === action ? (
+                                        <span className="text-sm text-muted-foreground italic">{t.pressAKey}</span>
+                                    ) : (
+                                        <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                                            {formatBindingForDisplay(keybindings[action])}
+                                        </kbd>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setKeybindingConflict(null);
+                                            setRecordingAction(action);
+                                        }}
+                                    >
+                                        {recordingAction === action ? t.cancel : t.recordShortcut}
+                                    </Button>
+                                    {keybindings[action] !== DEFAULT_KEYBINDINGS[action] && (
+                                        <Button size="sm" variant="ghost" onClick={() => resetKeybinding(action)}>
+                                            {t.reset}
+                                        </Button>
+                                    )}
+                                </SettingsRow>
+                            ))}
+                            {keybindingConflict && (
+                                <p className="px-4 pb-3 text-xs text-destructive">
+                                    {t.keybindingConflict.replace("{key}", formatBindingForDisplay(keybindingConflict))}
+                                </p>
+                            )}
                         </SettingsSection>
 
                         <div className="flex flex-col items-center gap-1.5 pt-2">

@@ -73,6 +73,12 @@ export interface AppSettings {
     // Set once the first-run provider setup wizard has been completed (or
     // explicitly skipped), so it doesn't reappear on every launch.
     onboardingComplete?: boolean;
+    // User-remapped shortcuts, keyed by action name, normalized as
+    // "mod+shift+k" (mod = Ctrl/Cmd). Covers both menu-accelerator actions
+    // (KeybindingAction, above) and renderer-only ones the frontend matches
+    // in JS (command palette, shortcuts dialog) — this store doesn't
+    // distinguish the two, it just persists whatever the renderer sends.
+    keybindings?: Record<string, string>;
 }
 
 const DEFAULTS: AppSettings = {

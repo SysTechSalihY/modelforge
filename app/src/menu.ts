@@ -1,6 +1,12 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, dialog } from "electron";
+import { DEFAULT_MENU_KEYBINDINGS, bindingToAccelerator, type KeybindingAction } from "./keybindings";
 
-export function setupMenu(getWindow: () => BrowserWindow | null, checkForUpdates: () => void): void {
+export function setupMenu(
+    getWindow: () => BrowserWindow | null,
+    checkForUpdates: () => void,
+    keybindings: Partial<Record<KeybindingAction, string>> = {}
+): void {
+    const bindings = { ...DEFAULT_MENU_KEYBINDINGS, ...keybindings };
     const isMac = process.platform === "darwin";
 
     function send(channel: string) {
@@ -40,8 +46,16 @@ export function setupMenu(getWindow: () => BrowserWindow | null, checkForUpdates
         {
             label: "File",
             submenu: [
-                { label: "New Chat", accelerator: "CmdOrCtrl+N", click: () => send("menu:new-chat") },
-                { label: "Settings", accelerator: "CmdOrCtrl+,", click: () => send("menu:open-settings") },
+                {
+                    label: "New Chat",
+                    accelerator: bindingToAccelerator(bindings.newChat),
+                    click: () => send("menu:new-chat"),
+                },
+                {
+                    label: "Settings",
+                    accelerator: bindingToAccelerator(bindings.openSettings),
+                    click: () => send("menu:open-settings"),
+                },
                 { type: "separator" },
                 isMac ? { role: "close" } : { role: "quit" },
             ],
