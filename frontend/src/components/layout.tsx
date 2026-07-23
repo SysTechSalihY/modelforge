@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CommandPalette } from "@/components/command-palette";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -513,6 +514,14 @@ export default function Layout() {
     const [newProjectName, setNewProjectName] = useState("");
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
+    useEffect(() => {
+        if (!hasApi) return;
+        window.api.settings.get().then((s) => {
+            setShowOnboarding(!s.onboardingComplete);
+        });
+    }, [hasApi]);
 
     const query = search.trim().toLowerCase();
     const matchesSearch = (s: ChatSession) =>
@@ -754,6 +763,7 @@ export default function Layout() {
                 onNavigateCompare={() => navigate("/compare")}
             />
             <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+            <OnboardingWizard open={showOnboarding} onDone={() => setShowOnboarding(false)} />
         </div>
     );
 }

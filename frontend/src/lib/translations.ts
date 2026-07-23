@@ -204,6 +204,17 @@ export interface Dictionary {
     customProviderBaseUrl: string;
     customProviderModelIds: string;
     addCustomProvider: string;
+    onboardingTitle: string;
+    onboardingSubtitle: string;
+    onboardingOllama: string;
+    onboardingOllamaDesc: string;
+    onboardingLlamaCpp: string;
+    onboardingLlamaCppDesc: string;
+    onboardingCloudDesc: string;
+    onboardingKeyLabel: string;
+    onboardingKeyHint: string;
+    onboardingSkip: string;
+    onboardingContinue: string;
     resetToDefault: string;
     usingCustomPrompt: string;
     dataManagement: string;
@@ -446,6 +457,17 @@ export const en: Dictionary = {
     customProviderBaseUrl: "Base URL (e.g. https://api.groq.com/openai/v1)",
     customProviderModelIds: "Model IDs, comma-separated",
     addCustomProvider: "Add provider",
+    onboardingTitle: "Welcome to Modelforge",
+    onboardingSubtitle: "How would you like to run models? You can add more later in Settings.",
+    onboardingOllama: "Ollama (local)",
+    onboardingOllamaDesc: "Free, private, runs on your machine. Recommended to start.",
+    onboardingLlamaCpp: "llama.cpp (local)",
+    onboardingLlamaCppDesc: "Free, private, with Vulkan/CUDA GPU acceleration.",
+    onboardingCloudDesc: "Requires an API key and a paid account with the provider.",
+    onboardingKeyLabel: "API key",
+    onboardingKeyHint: "Stored encrypted on this device — you can change it anytime in Settings.",
+    onboardingSkip: "Skip for now",
+    onboardingContinue: "Continue",
     resetToDefault: "Reset to default",
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
@@ -696,6 +718,17 @@ export const tr: Dictionary = {
     customProviderBaseUrl: "Temel URL (ör. https://api.groq.com/openai/v1)",
     customProviderModelIds: "Model ID'leri, virgülle ayrılmış",
     addCustomProvider: "Sağlayıcı ekle",
+    onboardingTitle: "Modelforge'a hoş geldiniz",
+    onboardingSubtitle: "Modelleri nasıl çalıştırmak istersiniz? Daha sonra Ayarlar'dan başka sağlayıcı da ekleyebilirsiniz.",
+    onboardingOllama: "Ollama (yerel)",
+    onboardingOllamaDesc: "Ücretsiz, özel, bilgisayarınızda çalışır. Başlamak için önerilir.",
+    onboardingLlamaCpp: "llama.cpp (yerel)",
+    onboardingLlamaCppDesc: "Vulkan/CUDA GPU hızlandırmalı, ücretsiz ve özel.",
+    onboardingCloudDesc: "Sağlayıcıdan bir API anahtarı ve ücretli hesap gerektirir.",
+    onboardingKeyLabel: "API anahtarı",
+    onboardingKeyHint: "Bu cihazda şifreli olarak saklanır — istediğiniz zaman Ayarlar'dan değiştirebilirsiniz.",
+    onboardingSkip: "Şimdilik atla",
+    onboardingContinue: "Devam et",
     resetToDefault: "Varsayılana dön",
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",

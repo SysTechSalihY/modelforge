@@ -21,6 +21,11 @@ import {
     ChevronRight,
     Clock,
     Play,
+    SlidersHorizontal,
+    Boxes,
+    MessageSquare,
+    Volume2,
+    Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -699,13 +704,27 @@ export default function Settings() {
                     className="items-start gap-8"
                 >
                     <TabsList variant="line" className="w-48 shrink-0">
-                        <TabsTrigger value="general">{t.settingsTabGeneral}</TabsTrigger>
-                        <TabsTrigger value="models">{t.settingsTabModels}</TabsTrigger>
-                        <TabsTrigger value="integrations">{t.settingsTabIntegrations}</TabsTrigger>
-                        <TabsTrigger value="chat">{t.settingsTabChat}</TabsTrigger>
-                        <TabsTrigger value="voice">{t.settingsTabVoice}</TabsTrigger>
-                        <TabsTrigger value="automation">{t.settingsTabAutomation}</TabsTrigger>
-                        <TabsTrigger value="data">{t.settingsTabData}</TabsTrigger>
+                        <TabsTrigger value="general" className="justify-start gap-2">
+                            <SlidersHorizontal className="size-4 shrink-0" /> {t.settingsTabGeneral}
+                        </TabsTrigger>
+                        <TabsTrigger value="models" className="justify-start gap-2">
+                            <Boxes className="size-4 shrink-0" /> {t.settingsTabModels}
+                        </TabsTrigger>
+                        <TabsTrigger value="integrations" className="justify-start gap-2">
+                            <Plug className="size-4 shrink-0" /> {t.settingsTabIntegrations}
+                        </TabsTrigger>
+                        <TabsTrigger value="chat" className="justify-start gap-2">
+                            <MessageSquare className="size-4 shrink-0" /> {t.settingsTabChat}
+                        </TabsTrigger>
+                        <TabsTrigger value="voice" className="justify-start gap-2">
+                            <Volume2 className="size-4 shrink-0" /> {t.settingsTabVoice}
+                        </TabsTrigger>
+                        <TabsTrigger value="automation" className="justify-start gap-2">
+                            <Clock className="size-4 shrink-0" /> {t.settingsTabAutomation}
+                        </TabsTrigger>
+                        <TabsTrigger value="data" className="justify-start gap-2">
+                            <Database className="size-4 shrink-0" /> {t.settingsTabData}
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="general" className="min-w-0 flex-1 flex flex-col gap-8">

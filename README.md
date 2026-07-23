@@ -66,7 +66,8 @@ Beyond chat, Modelforge includes an **agentic mode** — the model can read/writ
 - **Custom model storage location** — Settings → General → Ollama Server → "Model storage location" lets you point downloaded models at any folder (e.g. a larger or faster drive) instead of Ollama's default location. If this app started Ollama, it restarts it automatically with the new location; if Ollama is running outside the app, you're told to restart it yourself.
 
 **Customization & control**
-- **Settings is organized into tabs** (General, Models, Integrations, Chat & Prompts, Voice, Data) instead of one long scrolling page — it holds up better as more settings get added over time.
+- **First-run setup** — on first launch, pick which provider you want to start with (a local one, or a cloud one with its API key) right away, instead of hunting through Settings. Skippable, and only shown once.
+- **Settings is organized into a sidebar** (General, Models, Integrations, Chat & Prompts, Voice, Automation, Data), each with its own icon — it holds up better as more settings get added over time than one long scrolling page.
 - English and Turkish UI localization.
 - **Theming** — light/dark/system color mode plus a choice of accent colors (default gray, blue, green, purple, orange, rose), in Settings → General → Appearance.
 - Configurable Ollama host — point at a remote server instead of localhost.
