@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld("api", {
     system: {
         getSpecs: () => ipcRenderer.invoke("system:getSpecs"),
         getRecommendations: () => ipcRenderer.invoke("system:getRecommendations"),
+        getActivity: () => ipcRenderer.invoke("system:getActivity"),
     },
 
     settings: {

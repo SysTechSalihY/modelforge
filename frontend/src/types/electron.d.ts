@@ -119,6 +119,21 @@ export interface McpServerStatus {
   error?: string;
 }
 
+export interface OllamaRunningModel {
+  name: string;
+  size: number;
+  size_vram: number;
+  expires_at: string;
+}
+
+export interface AppActivity {
+  ollamaRunning: boolean;
+  ollamaLoadedModels: OllamaRunningModel[];
+  llamacppLoadedModels: string[];
+  mcpServers: Record<string, McpServerStatus>;
+  memory: { rssMB: number; heapUsedMB: number };
+}
+
 export interface RollbackResult {
   path: string;
   restoredContent: boolean;
@@ -352,6 +367,7 @@ export interface ElectronApi {
   system: {
     getSpecs: () => Promise<SystemSpecs>;
     getRecommendations: () => Promise<ModelRecommendations>;
+    getActivity: () => Promise<AppActivity>;
   };
   settings: {
     get: () => Promise<AppSettings>;

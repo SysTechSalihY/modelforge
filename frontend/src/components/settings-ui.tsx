@@ -5,16 +5,23 @@ export function SettingsSection({
     description,
     children,
     className,
+    action,
 }: {
     title: string;
     description?: string;
     children: React.ReactNode;
     className?: string;
+    action?: React.ReactNode;
 }) {
     return (
         <section className={cn("mb-8 last:mb-0", className)}>
-            <h2 className="text-sm font-semibold">{title}</h2>
-            {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h2 className="text-sm font-semibold">{title}</h2>
+                    {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+                </div>
+                {action}
+            </div>
             <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
                 {children}
             </div>

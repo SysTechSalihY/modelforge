@@ -172,6 +172,27 @@ export async function listModels(): Promise<OllamaModel[]> {
     return data.models || [];
 }
 
+export interface OllamaRunningModel {
+    name: string;
+    size: number;
+    size_vram: number;
+    expires_at: string;
+}
+
+// /api/ps lists models currently loaded in memory, distinct from /api/tags
+// (everything ever pulled) — used for the activity/resource usage view.
+export async function listRunningModels(): Promise<OllamaRunningModel[]> {
+    let res: Response;
+    try {
+        res = await fetch(`${HOST}/api/ps`);
+    } catch (err) {
+        throw describeNetworkError(err);
+    }
+    if (!res.ok) throw new Error(await describeError(res, "Failed to list running models"));
+    const data = await res.json();
+    return data.models || [];
+}
+
 export async function deleteModel(name: string): Promise<{ deleted: boolean }> {
     let res: Response;
     try {

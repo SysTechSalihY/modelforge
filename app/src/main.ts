@@ -344,6 +344,20 @@ function registerIpcHandlers(): void {
         const specs = await systemSpecs.getSpecs();
         return systemSpecs.recommendModels(specs);
     });
+    ipcMain.handle("system:getActivity", async () => {
+        const ollamaRunning = await ollama.isRunning();
+        const ollamaLoadedModels = ollamaRunning
+            ? await ollama.listRunningModels().catch(() => [])
+            : [];
+        const mem = process.memoryUsage();
+        return {
+            ollamaRunning,
+            ollamaLoadedModels,
+            llamacppLoadedModels: llamacpp.listLoadedModels(),
+            mcpServers: mcpClient.getServerStatuses(),
+            memory: { rssMB: +(mem.rss / 1e6).toFixed(1), heapUsedMB: +(mem.heapUsed / 1e6).toFixed(1) },
+        };
+    });
 
     ipcMain.handle("settings:get", () => settingsStore.getSettings());
     ipcMain.handle("settings:save", (_event: IpcMainInvokeEvent, partial) => {

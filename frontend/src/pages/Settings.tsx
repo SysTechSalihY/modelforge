@@ -26,6 +26,7 @@ import {
     MessageSquare,
     Volume2,
     Database,
+    MemoryStick,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ import type {
     HfModelSummary,
     HfGgufFile,
     ScheduledTask,
+    AppActivity,
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
 import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, CUSTOM_PROVIDER_PRESETS } from "@/lib/providers";
@@ -136,6 +138,8 @@ export default function Settings() {
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
+    const [activity, setActivity] = useState<AppActivity | null>(null);
+    const [activityLoading, setActivityLoading] = useState(false);
     const [importMessage, setImportMessage] = useState<string | null>(null);
     const [ollamaHostInput, setOllamaHostInput] = useState("");
     const [modelsDirStatus, setModelsDirStatus] = useState<string | null>(null);
@@ -191,6 +195,7 @@ export default function Settings() {
         window.api.ollama.status().then(setRunning);
         window.api.system.getSpecs().then(setSpecs);
         window.api.system.getRecommendations().then(setRecommendations);
+        window.api.system.getActivity().then(setActivity);
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
@@ -336,6 +341,15 @@ export default function Settings() {
         if (!confirm("Delete all conversations? This cannot be undone.")) return;
         await window.api.sessions.clearAll();
         await refreshSessions();
+    }
+
+    async function refreshActivity() {
+        setActivityLoading(true);
+        try {
+            setActivity(await window.api.system.getActivity());
+        } finally {
+            setActivityLoading(false);
+        }
     }
 
     async function handleCopyDiagnostics() {
@@ -2040,6 +2054,56 @@ export default function Settings() {
                                         <FolderOpen className="size-4" /> {t.open}
                                     </Button>
                                 </SettingsRow>
+                            )}
+                        </SettingsSection>
+
+                        <SettingsSection
+                            title={t.appActivity}
+                            description={t.appActivityDescription}
+                            action={
+                                <Button size="sm" variant="outline" onClick={refreshActivity} className="gap-1.5" disabled={activityLoading}>
+                                    <RefreshCw className={`size-3.5 ${activityLoading ? "animate-spin" : ""}`} /> {t.refresh}
+                                </Button>
+                            }
+                        >
+                            {activity && (
+                                <>
+                                    <SettingsRow label="Ollama">
+                                        <span className="text-sm text-muted-foreground">
+                                            {activity.ollamaRunning
+                                                ? activity.ollamaLoadedModels.length > 0
+                                                    ? activity.ollamaLoadedModels.map((m) => m.name).join(", ")
+                                                    : t.noModelsLoaded
+                                                : t.notRunning}
+                                        </span>
+                                    </SettingsRow>
+                                    <SettingsRow label="llama.cpp">
+                                        <span className="text-sm text-muted-foreground">
+                                            {activity.llamacppLoadedModels.length > 0
+                                                ? activity.llamacppLoadedModels.map((p) => p.split(/[/\\]/).pop()).join(", ")
+                                                : t.noModelsLoaded}
+                                        </span>
+                                    </SettingsRow>
+                                    <SettingsRow label={t.mcpServersLabel}>
+                                        {Object.keys(activity.mcpServers).length > 0 ? (
+                                            <div className="flex flex-wrap justify-end gap-1.5">
+                                                {Object.entries(activity.mcpServers).map(([id, status]) => (
+                                                    <Badge key={id} variant={status.connected ? "secondary" : "outline"}>
+                                                        {id} · {status.toolCount} {t.tools}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-sm text-muted-foreground">{t.noneConnected}</span>
+                                        )}
+                                    </SettingsRow>
+                                    <SettingsRow label={t.appMemoryUsage}>
+                                        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                            <MemoryStick className="size-3.5" />
+                                            {activity.memory.rssMB.toLocaleString()} MB
+                                        </span>
+                                    </SettingsRow>
+                                </>
                             )}
                         </SettingsSection>
 

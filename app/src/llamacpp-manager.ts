@@ -88,6 +88,13 @@ export function listModels(modelsDir: string): LocalGgufModel[] {
         });
 }
 
+// Model paths currently kept warm in modelCache — used for the
+// activity/resource usage view. Doesn't report VRAM/RAM footprint since
+// node-llama-cpp doesn't expose per-model memory usage.
+export function listLoadedModels(): string[] {
+    return [...modelCache.keys()];
+}
+
 export function deleteModel(modelsDir: string, name: string): void {
     const root = path.resolve(modelsDir);
     const target = path.resolve(root, name);

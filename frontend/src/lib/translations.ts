@@ -232,6 +232,15 @@ export interface Dictionary {
     diagnostics: string;
     diagnosticsDescription: string;
     copyDiagnosticInfo: string;
+    appActivity: string;
+    appActivityDescription: string;
+    refresh: string;
+    noModelsLoaded: string;
+    notRunning: string;
+    mcpServersLabel: string;
+    tools: string;
+    noneConnected: string;
+    appMemoryUsage: string;
     copied: string;
     openLogsFolder: string;
     checkForUpdates: string;
@@ -484,6 +493,15 @@ export const en: Dictionary = {
     open: "Open",
     diagnostics: "Diagnostics",
     diagnosticsDescription: "Useful when reporting a bug: app/system versions, Ollama connection status, and recent log output.",
+    appActivity: "Activity & resource usage",
+    appActivityDescription: "What's currently loaded and connected, plus this app's memory footprint.",
+    refresh: "Refresh",
+    noModelsLoaded: "No models loaded",
+    notRunning: "Not running",
+    mcpServersLabel: "MCP servers",
+    tools: "tools",
+    noneConnected: "None connected",
+    appMemoryUsage: "App memory usage",
     copyDiagnosticInfo: "Copy diagnostic info",
     copied: "Copied",
     openLogsFolder: "Open logs folder",
@@ -746,6 +764,15 @@ export const tr: Dictionary = {
     diagnostics: "Tanılama",
     diagnosticsDescription: "Hata bildirirken faydalıdır: uygulama/sistem sürümleri, Ollama bağlantı durumu ve son günlük çıktısı.",
     copyDiagnosticInfo: "Tanılama bilgisini kopyala",
+    appActivity: "Etkinlik ve kaynak kullanımı",
+    appActivityDescription: "Şu anda yüklü ve bağlı olanlar, ayrıca bu uygulamanın bellek kullanımı.",
+    refresh: "Yenile",
+    noModelsLoaded: "Yüklü model yok",
+    notRunning: "Çalışmıyor",
+    mcpServersLabel: "MCP sunucuları",
+    tools: "araç",
+    noneConnected: "Bağlı yok",
+    appMemoryUsage: "Uygulama bellek kullanımı",
     copied: "Kopyalandı",
     openLogsFolder: "Günlük klasörünü aç",
     checkForUpdates: "Güncellemeleri denetle",
