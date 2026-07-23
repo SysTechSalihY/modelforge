@@ -178,6 +178,15 @@ export interface Dictionary {
     shortcutNewline: string;
     shortcutStopGenerating: string;
     compareModels: string;
+    usageDashboard: string;
+    usageTotalCost: string;
+    usageTotalTokens: string;
+    usageTotalSessions: string;
+    usageByProvider: string;
+    usageByModel: string;
+    usageByDay: string;
+    usageSessions: string;
+    usageNoData: string;
     compareSamePrompt: string;
     compareRun: string;
     compareRunToSee: string;
@@ -449,6 +458,15 @@ export const en: Dictionary = {
     shortcutNewline: "New line",
     shortcutStopGenerating: "Stop generating",
     compareModels: "Compare models",
+    usageDashboard: "Usage dashboard",
+    usageTotalCost: "Estimated total cost",
+    usageTotalTokens: "Total tokens",
+    usageTotalSessions: "Chats with usage",
+    usageByProvider: "By provider",
+    usageByModel: "By model",
+    usageByDay: "Last 14 days",
+    usageSessions: "chats",
+    usageNoData: "No usage data yet — send some messages to cloud models to see cost estimates here.",
     compareSamePrompt: "Type a prompt to send to every selected model at once...",
     compareRun: "Run",
     compareRunToSee: "Run the comparison to see this model's response.",
@@ -728,6 +746,15 @@ export const tr: Dictionary = {
     shortcutNewline: "Yeni satır",
     shortcutStopGenerating: "Üretimi durdur",
     compareModels: "Modelleri karşılaştır",
+    usageDashboard: "Kullanım paneli",
+    usageTotalCost: "Tahmini toplam maliyet",
+    usageTotalTokens: "Toplam token",
+    usageTotalSessions: "Kullanımı olan sohbetler",
+    usageByProvider: "Sağlayıcıya göre",
+    usageByModel: "Modele göre",
+    usageByDay: "Son 14 gün",
+    usageSessions: "sohbet",
+    usageNoData: "Henüz kullanım verisi yok — maliyet tahminlerini burada görmek için bulut modellere birkaç mesaj gönderin.",
     compareSamePrompt: "Seçili tüm modellere aynı anda gönderilecek bir prompt yazın...",
     compareRun: "Çalıştır",
     compareRunToSee: "Bu modelin yanıtını görmek için karşılaştırmayı çalıştırın.",

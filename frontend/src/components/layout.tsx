@@ -17,6 +17,7 @@ import {
     X,
     Keyboard,
     Scale,
+    BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -667,6 +668,16 @@ export default function Layout() {
                         <Scale className="size-4" />
                         {t.compareModels}
                     </Button>
+                    <Button
+                        onClick={() => navigate("/usage")}
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-start gap-2 text-muted-foreground"
+                        disabled={!hasApi}
+                    >
+                        <BarChart3 className="size-4" />
+                        {t.usageDashboard}
+                    </Button>
                 </div>
 
                 <div className="relative px-3 pb-2">
@@ -768,6 +779,7 @@ export default function Layout() {
                 onOpenSession={(id) => navigate(`/chat/${id}`)}
                 onNavigateSettings={() => navigate("/settings")}
                 onNavigateCompare={() => navigate("/compare")}
+                onNavigateUsage={() => navigate("/usage")}
             />
             <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} keybindings={keybindings} />
             <OnboardingWizard open={showOnboarding} onDone={() => setShowOnboarding(false)} />

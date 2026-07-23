@@ -3,6 +3,7 @@ import Layout from "./components/layout";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import Compare from "./pages/Compare";
+import UsageDashboard from "./pages/UsageDashboard";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionsProvider } from "@/lib/sessions-context";
 import { I18nProvider } from "@/lib/i18n";
@@ -16,6 +17,7 @@ const router = createHashRouter([
       { path: "chat/:sessionId", element: <Chat /> },
       { path: "settings", element: <Settings /> },
       { path: "compare", element: <Compare /> },
+      { path: "usage", element: <UsageDashboard /> },
     ],
   },
 ]);

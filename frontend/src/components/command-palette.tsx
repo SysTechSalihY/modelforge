@@ -1,4 +1,4 @@
-import { FolderOpen, MessageSquare, Plus, Settings as SettingsIcon, Scale } from "lucide-react";
+import { FolderOpen, MessageSquare, Plus, Settings as SettingsIcon, Scale, BarChart3 } from "lucide-react";
 import {
     CommandDialog,
     CommandEmpty,
@@ -18,6 +18,7 @@ export function CommandPalette({
     onOpenSession,
     onNavigateSettings,
     onNavigateCompare,
+    onNavigateUsage,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -27,6 +28,7 @@ export function CommandPalette({
     onOpenSession: (id: string) => void;
     onNavigateSettings: () => void;
     onNavigateCompare: () => void;
+    onNavigateUsage: () => void;
 }) {
     function run(action: () => void) {
         action();
@@ -47,6 +49,9 @@ export function CommandPalette({
                     </CommandItem>
                     <CommandItem onSelect={() => run(onNavigateCompare)}>
                         <Scale /> Compare models
+                    </CommandItem>
+                    <CommandItem onSelect={() => run(onNavigateUsage)}>
+                        <BarChart3 /> Usage dashboard
                     </CommandItem>
                 </CommandGroup>
 
