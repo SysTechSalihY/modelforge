@@ -540,11 +540,23 @@ export default function Layout() {
 
     useEffect(() => {
         if (!hasApi) return;
+        const applyDisplaySettings = (s: { uiDensity?: string; reduceMotion?: boolean }) => {
+            const root = document.documentElement;
+            root.classList.toggle("density-compact", s.uiDensity === "compact");
+            root.classList.toggle("reduce-motion", s.reduceMotion === true);
+        };
         window.api.settings.get().then((s) => {
             setShowOnboarding(!s.onboardingComplete);
             setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings });
+            applyDisplaySettings(s);
         });
-        return subscribeKeybindings(setKeybindings);
+        const onDisplaySettings = (event: Event) => applyDisplaySettings((event as CustomEvent).detail);
+        window.addEventListener("app:display-settings", onDisplaySettings);
+        const unsubscribe = subscribeKeybindings(setKeybindings);
+        return () => {
+            unsubscribe();
+            window.removeEventListener("app:display-settings", onDisplaySettings);
+        };
     }, [hasApi]);
 
     const query = search.trim().toLowerCase();

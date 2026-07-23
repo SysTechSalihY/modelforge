@@ -395,6 +395,7 @@ function registerIpcHandlers(): void {
     ipcMain.handle("settings:save", (_event: IpcMainInvokeEvent, partial) => {
         const saved = settingsStore.saveSettings(partial);
         if (partial.ollamaHost !== undefined) ollama.setHost(saved.ollamaHost);
+        if (partial.llamaCppMaxCachedModels !== undefined) llamacpp.setModelCacheLimit(saved.llamaCppMaxCachedModels ?? 2);
         if (partial.keybindings !== undefined) {
             setupMenu(() => mainWindow, () => checkForUpdatesManually(() => mainWindow), saved.keybindings);
         }
@@ -750,6 +751,7 @@ app.whenReady().then(async () => {
     ollama.setHost(settingsStore.getSettings().ollamaHost);
     ollama.setModelsDir(settingsStore.getSettings().modelsDir);
     await ollama.start();
+    llamacpp.setModelCacheLimit(settingsStore.getSettings().llamaCppMaxCachedModels ?? 2);
     await llamacpp.setGpuBackend(settingsStore.getSettings().llamaCppGpuBackend ?? "auto");
     setupAutoUpdater(() => mainWindow);
     void connectEnabledMcpServers();

@@ -38,7 +38,13 @@ const modelCache = new Map<string, LlamaModel>();
 const modelLoads = new Map<string, Promise<LlamaModel>>();
 const modelLastUsed = new Map<string, number>();
 const activeModelUsers = new Map<string, number>();
-const MAX_CACHED_MODELS = 2;
+let maxCachedModels = 2;
+
+export function setModelCacheLimit(limit: number): void {
+    if (!Number.isFinite(limit)) return;
+    maxCachedModels = Math.max(1, Math.min(Math.floor(limit), 8));
+    void evictIdleModels();
+}
 
 function modelCacheKey(modelPath: string, gpuLayers?: number): string {
     return `${modelPath}\0${gpuLayers ?? "auto"}`;
@@ -139,7 +145,7 @@ async function loadModel(modelPath: string, gpuLayers?: number): Promise<LlamaMo
 }
 
 async function evictIdleModels(protectedKey?: string): Promise<void> {
-    while (modelCache.size > MAX_CACHED_MODELS) {
+    while (modelCache.size > maxCachedModels) {
         const candidate = [...modelCache.keys()]
             .filter((key) => key !== protectedKey && (activeModelUsers.get(key) ?? 0) === 0)
             .sort((a, b) => (modelLastUsed.get(a) ?? 0) - (modelLastUsed.get(b) ?? 0))[0];

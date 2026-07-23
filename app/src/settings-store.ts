@@ -54,6 +54,10 @@ export interface AppSettings {
     promptPresets: PromptPreset[];
     theme: "light" | "dark" | "system";
     language: "en" | "tr";
+    uiDensity?: "comfortable" | "compact";
+    reduceMotion?: boolean;
+    agentMaxSteps?: number;
+    llamaCppMaxCachedModels?: number;
     // Text-to-speech: which browser/OS voice to use (voiceURI from
     // speechSynthesis.getVoices(), chosen client-side) and whether assistant
     // responses should be read aloud automatically as they finish.
@@ -106,6 +110,10 @@ const DEFAULTS: AppSettings = {
     promptPresets: [],
     theme: "system",
     language: "en",
+    uiDensity: "comfortable",
+    reduceMotion: false,
+    agentMaxSteps: 25,
+    llamaCppMaxCachedModels: 2,
 };
 
 function filePath(): string {

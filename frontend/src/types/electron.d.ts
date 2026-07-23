@@ -211,6 +211,10 @@ export interface AppSettings {
   promptPresets: PromptPreset[];
   theme: "light" | "dark" | "system";
   language: "en" | "tr";
+  uiDensity?: "comfortable" | "compact";
+  reduceMotion?: boolean;
+  agentMaxSteps?: number;
+  llamaCppMaxCachedModels?: number;
   ttsVoiceURI?: string;
   ttsAutoRead?: boolean;
   mcpServers?: McpServerConfig[];

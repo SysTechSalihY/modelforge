@@ -163,7 +163,7 @@ const DIAGRAM_PROMPT_PRESETS: DiagramPromptPreset[] = [
 // Caps how many automatic tool-result -> model-continuation round trips can
 // happen for a single user turn, so a model that keeps calling tools without
 // ever producing a final answer can't loop indefinitely.
-const AGENT_MAX_STEPS = 25;
+const DEFAULT_AGENT_MAX_STEPS = 25;
 
 function buildMessageContent(text: string, attachments: Attachment[], ragContent = "") {
     const fileBlocks = attachments
@@ -395,6 +395,7 @@ export default function Chat() {
     const [pendingCustomProvider, setPendingCustomProvider] = useState<ProviderId | null>(null);
     const [customModelInput, setCustomModelInput] = useState("");
     const [settings, setSettings] = useState<AppSettings | null>(null);
+    const agentMaxSteps = Math.max(5, Math.min(settings?.agentMaxSteps ?? DEFAULT_AGENT_MAX_STEPS, 100));
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -959,12 +960,12 @@ export default function Chat() {
     // (e.g. read a file, then act on what it found) without the user having
     // to prompt again.
     function continueAfterTools(updatedMessages: ChatMessage[]) {
-        if (agentStepCount >= AGENT_MAX_STEPS) {
+        if (agentStepCount >= agentMaxSteps) {
             setMessages((m) => [
                 ...m,
                 {
                     role: "assistant",
-                    content: `⚠️ Reached the agent step limit (${AGENT_MAX_STEPS}) for this turn. Send another message to let it continue.`,
+                    content: `⚠️ Reached the agent step limit (${agentMaxSteps}) for this turn. Send another message to let it continue.`,
                 },
             ]);
             return;
@@ -1408,7 +1409,7 @@ export default function Chat() {
                 )}
                 {agentStepCount > 0 && (
                     <span className="text-xs text-muted-foreground" title={t.agentStepTooltip}>
-                        {t.agentStep} {agentStepCount}/{AGENT_MAX_STEPS}
+                        {t.agentStep} {agentStepCount}/{agentMaxSteps}
                     </span>
                 )}
                 {agentMode && agentWorkspace && (

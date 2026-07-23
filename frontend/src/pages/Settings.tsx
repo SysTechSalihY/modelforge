@@ -84,6 +84,16 @@ import { cn } from "@/lib/utils";
 
 type SettingsTab = "general" | "models" | "integrations" | "chat" | "voice" | "automation" | "data";
 
+const SETTINGS_SEARCH_ITEMS: { tab: SettingsTab; label: string; keywords: string }[] = [
+    { tab: "general", label: "Appearance, density & motion", keywords: "theme color compact comfortable animation reduced motion language server gpu cache" },
+    { tab: "models", label: "Models & hardware", keywords: "ollama hugging face download vram recommendation gguf" },
+    { tab: "integrations", label: "Accounts, providers & MCP", keywords: "github hugging face api key custom gpu backend figma mcp" },
+    { tab: "chat", label: "Chat & agent behavior", keywords: "prompt temperature context tokens agent steps tool calls" },
+    { tab: "voice", label: "Voice & speech", keywords: "microphone transcription tts read aloud voice" },
+    { tab: "automation", label: "Automation", keywords: "scheduled task interval prompt" },
+    { tab: "data", label: "Data, activity & diagnostics", keywords: "export import logs memory activity clear" },
+];
+
 // Ollama pulls Hugging Face GGUF models via a "hf.co/user/repo[:quant]" model
 // name — accept a pasted full URL or the "huggingface.co/" host too, rather
 // than making the user hand-edit what they copied from their browser.
@@ -132,6 +142,7 @@ export default function Settings() {
     const [hasApi, setHasApi] = useState(true);
     const [search, setSearch] = useState("");
     const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+    const [settingsQuery, setSettingsQuery] = useState("");
     const [openaiKeyInput, setOpenaiKeyInput] = useState("");
     const [anthropicKeyInput, setAnthropicKeyInput] = useState("");
     const [openaiKeySet, setOpenaiKeySet] = useState(false);
@@ -638,6 +649,9 @@ export default function Settings() {
         const merged = { ...settings, ...partial };
         setSettings(merged);
         await window.api.settings.save(partial);
+        if (partial.uiDensity !== undefined || partial.reduceMotion !== undefined) {
+            window.dispatchEvent(new CustomEvent("app:display-settings", { detail: merged }));
+        }
     }
 
     async function addMlxModel() {
@@ -843,10 +857,22 @@ export default function Settings() {
     return (
         <ScrollArea className="h-full bg-background/25">
             <div className="mx-auto max-w-5xl px-4 pb-20 pt-16 sm:px-6 md:pt-8 2xl:max-w-6xl">
-                <div className="mb-8 flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"><Settings2 className="size-5" /></span>
-                    <div><h1 className="text-2xl font-semibold tracking-tight">{t.settings}</h1><p className="mt-0.5 text-xs text-muted-foreground">Configure models, integrations, automation, and your workspace.</p></div>
+                <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                    <div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"><Settings2 className="size-5" /></span>
+                    <div><h1 className="text-2xl font-semibold tracking-tight">{t.settings}</h1><p className="mt-0.5 text-xs text-muted-foreground">Configure models, integrations, automation, and your workspace.</p></div></div>
+                    <div className="relative w-full sm:w-72">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input value={settingsQuery} onChange={(e) => setSettingsQuery(e.target.value)} placeholder="Search settings…" className="h-10 rounded-xl bg-card pl-9 shadow-sm" aria-label="Search settings" />
+                    </div>
                 </div>
+
+                {settingsQuery.trim() && (
+                    <div className="surface-glass shadow-soft mb-6 grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
+                        {SETTINGS_SEARCH_ITEMS.filter((item) => `${item.label} ${item.keywords}`.toLowerCase().includes(settingsQuery.trim().toLowerCase())).map((item) => (
+                            <button key={item.tab} onClick={() => { setActiveTab(item.tab); setSettingsQuery(""); }} className="rounded-xl border border-transparent p-3 text-left text-sm font-medium transition-colors hover:border-primary/20 hover:bg-primary/5">{item.label}<span className="mt-0.5 block text-xs font-normal text-muted-foreground">Open {item.tab} settings</span></button>
+                        ))}
+                    </div>
+                )}
 
                 <Tabs
                     value={activeTab}
@@ -990,6 +1016,17 @@ export default function Settings() {
                                         );
                                     })()}
                                 </SettingsRow>
+                                <SettingsRow label="Warm model cache" description="Maximum llama.cpp model variants retained in RAM/VRAM. Lower values save memory; higher values make model switching faster.">
+                                    <Select value={String(settings.llamaCppMaxCachedModels ?? 2)} onValueChange={(v) => saveSettings({ llamaCppMaxCachedModels: Number(v) })}>
+                                        <SelectTrigger size="sm" className="w-44"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="1">1 model · minimum memory</SelectItem>
+                                            <SelectItem value="2">2 models · balanced</SelectItem>
+                                            <SelectItem value="3">3 models · faster switching</SelectItem>
+                                            <SelectItem value="4">4 models · workstation</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </SettingsRow>
                                 <SettingsRow label={t.modelsDir} stacked>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="truncate rounded border border-border bg-muted px-2 py-1 font-mono text-xs">
@@ -1115,6 +1152,17 @@ export default function Settings() {
                                         </button>
                                     ))}
                                 </div>
+                            </SettingsRow>
+                            <SettingsRow label="Interface density" description="Choose how much information fits on screen.">
+                                <Select value={settings?.uiDensity ?? "comfortable"} onValueChange={(v) => saveSettings({ uiDensity: v as "comfortable" | "compact" })}>
+                                    <SelectTrigger size="sm" className="w-40"><SelectValue /></SelectTrigger>
+                                    <SelectContent><SelectItem value="comfortable">Comfortable</SelectItem><SelectItem value="compact">Compact</SelectItem></SelectContent>
+                                </Select>
+                            </SettingsRow>
+                            <SettingsRow label="Reduce motion" description="Minimize animations and smooth transitions for accessibility.">
+                                <button type="button" role="switch" aria-checked={settings?.reduceMotion ?? false} onClick={() => saveSettings({ reduceMotion: !(settings?.reduceMotion ?? false) })} className={cn("relative h-6 w-11 rounded-full transition-colors", settings?.reduceMotion ? "bg-primary" : "bg-muted")}>
+                                    <span className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform", settings?.reduceMotion ? "translate-x-5" : "translate-x-0.5")} />
+                                </button>
                             </SettingsRow>
                         </SettingsSection>
 
@@ -2193,6 +2241,25 @@ export default function Settings() {
                                             aria-label={t.systemPrompt}
                                             className="min-h-24"
                                         />
+                                    </SettingsRow>
+                                </SettingsSection>
+
+                                <SettingsSection title="Agent runtime" description="Control how independently Agent Mode can work before returning control to you." className="mt-8">
+                                    <SettingsRow label="Maximum tool steps per turn" description="Stops runaway tool loops. Larger values suit long repository analysis; smaller values provide more frequent checkpoints.">
+                                        <Input type="number" min={5} max={100} step={5} value={settings.agentMaxSteps ?? 25} onChange={(e) => saveSettings({ agentMaxSteps: Math.max(5, Math.min(Number(e.target.value), 100)) })} className="w-24" aria-label="Maximum agent tool steps" />
+                                    </SettingsRow>
+                                    <SettingsRow label="Recommended profile" stacked>
+                                        <div className="grid gap-2 sm:grid-cols-3">
+                                            {[
+                                                { label: "Cautious", value: 10, note: "Frequent user review" },
+                                                { label: "Balanced", value: 25, note: "Best default" },
+                                                { label: "Autonomous", value: 50, note: "Long coding tasks" },
+                                            ].map((profile) => (
+                                                <button key={profile.label} onClick={() => saveSettings({ agentMaxSteps: profile.value })} className={cn("rounded-xl border p-3 text-left transition-colors", (settings.agentMaxSteps ?? 25) === profile.value ? "border-primary/40 bg-primary/5" : "border-border hover:bg-muted/50")}>
+                                                    <span className="block text-sm font-medium">{profile.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{profile.value} steps · {profile.note}</span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </SettingsRow>
                                 </SettingsSection>
 

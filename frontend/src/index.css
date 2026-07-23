@@ -158,6 +158,21 @@
 
 * { scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent; }
 
+.density-compact {
+  font-size: 14px;
+  --radius: 0.625rem;
+}
+.density-compact [data-slot="button"] { min-height: 1.75rem; }
+.density-compact [data-slot="input"] { height: 1.875rem; }
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 .prose-chat p {
   margin: 0 0 0.5em;
 }
