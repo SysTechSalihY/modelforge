@@ -219,6 +219,9 @@ export interface Dictionary {
     usingCustomPrompt: string;
     dataManagement: string;
     exportAllConversations: string;
+    exportAsMarkdown: string;
+    copyAsMarkdown: string;
+    exportAsJson: string;
     exportAllDescription: string;
     export: string;
     importConversations: string;
@@ -481,6 +484,9 @@ export const en: Dictionary = {
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
     exportAllConversations: "Export all conversations",
+    exportAsMarkdown: "Export as Markdown",
+    copyAsMarkdown: "Copy as Markdown",
+    exportAsJson: "Export as JSON",
     exportAllDescription: "Save every chat to a single JSON file.",
     export: "Export",
     importConversations: "Import conversations",
@@ -751,6 +757,9 @@ export const tr: Dictionary = {
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",
     exportAllConversations: "Tüm sohbetleri dışa aktar",
+    exportAsMarkdown: "Markdown olarak dışa aktar",
+    copyAsMarkdown: "Markdown olarak kopyala",
+    exportAsJson: "JSON olarak dışa aktar",
     exportAllDescription: "Tüm sohbetleri tek bir JSON dosyasına kaydedin.",
     export: "Dışa aktar",
     importConversations: "Sohbetleri içe aktar",

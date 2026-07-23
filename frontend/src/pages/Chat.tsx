@@ -773,6 +773,16 @@ export default function Chat() {
         if (sessionId) await window.api.data.exportSession(sessionId);
     }
 
+    async function handleExportChatMarkdown() {
+        if (sessionId) await window.api.data.exportSessionMarkdown(sessionId);
+    }
+
+    async function handleCopyChatMarkdown() {
+        if (!sessionId) return;
+        const markdown = await window.api.data.getSessionMarkdown(sessionId);
+        if (markdown) await navigator.clipboard.writeText(markdown);
+    }
+
     async function runCompletion(
         history: ChatMessage[],
         baseMessages: ChatMessage[],
@@ -1352,15 +1362,25 @@ export default function Chat() {
                     </span>
                 )}
 
-                <Button
-                    size="icon"
-                    variant="outline"
-                    className={sessionCost > 0 ? "" : "ml-auto"}
-                    onClick={handleExportChat}
-                    aria-label="Export chat"
-                >
-                    <FileDown className="size-4" />
-                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={
+                            <Button
+                                size="icon"
+                                variant="outline"
+                                className={sessionCost > 0 ? "" : "ml-auto"}
+                                aria-label="Export chat"
+                            >
+                                <FileDown className="size-4" />
+                            </Button>
+                        }
+                    />
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={handleExportChatMarkdown}>{t.exportAsMarkdown}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleCopyChatMarkdown}>{t.copyAsMarkdown}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportChat}>{t.exportAsJson}</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
 
                 <Popover>
                     <PopoverTrigger

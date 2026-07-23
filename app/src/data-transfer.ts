@@ -24,6 +24,34 @@ export async function exportSession(win: BrowserWindow | null, id: string): Prom
     return { success: true };
 }
 
+// Tool-call/result messages are omitted from the Markdown rendering — they're
+// agent-mode bookkeeping, not something a reader sharing/archiving a
+// conversation cares about seeing.
+export function sessionToMarkdown(session: ChatSession): string {
+    const lines: string[] = [`# ${session.title}`, ""];
+    for (const m of session.messages) {
+        if (m.role === "tool" || (m.role === "assistant" && !m.content && m.toolCalls?.length)) continue;
+        const speaker = m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System";
+        lines.push(`**${speaker}:**`, "", m.content, "");
+    }
+    return lines.join("\n");
+}
+
+export async function exportSessionMarkdown(win: BrowserWindow | null, id: string): Promise<{ success: boolean }> {
+    const session = sessionsStore.getSession(id);
+    if (!session) return { success: false };
+
+    const options = {
+        defaultPath: `${sanitizeFilename(session.title)}.md`,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+    };
+    const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return { success: false };
+
+    fs.writeFileSync(result.filePath, sessionToMarkdown(session));
+    return { success: true };
+}
+
 export async function exportAllSessions(win: BrowserWindow | null): Promise<{ success: boolean }> {
     const sessions = sessionsStore.listSessions();
     const date = new Date().toISOString().slice(0, 10);

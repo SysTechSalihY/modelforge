@@ -502,6 +502,13 @@ function registerIpcHandlers(): void {
     ipcMain.handle("data:exportSession", (_event: IpcMainInvokeEvent, id: string) =>
         dataTransfer.exportSession(mainWindow, requireString(id, "session id"))
     );
+    ipcMain.handle("data:exportSessionMarkdown", (_event: IpcMainInvokeEvent, id: string) =>
+        dataTransfer.exportSessionMarkdown(mainWindow, requireString(id, "session id"))
+    );
+    ipcMain.handle("data:getSessionMarkdown", (_event: IpcMainInvokeEvent, id: string) => {
+        const session = sessionsStore.getSession(requireString(id, "session id"));
+        return session ? dataTransfer.sessionToMarkdown(session) : null;
+    });
     ipcMain.handle("data:exportAll", () => dataTransfer.exportAllSessions(mainWindow));
     ipcMain.handle("data:import", () => dataTransfer.importSessions(mainWindow));
     ipcMain.handle("data:getUserDataPath", () => dataTransfer.getUserDataPath());

@@ -186,6 +186,8 @@ contextBridge.exposeInMainWorld("api", {
 
     data: {
         exportSession: (id: string) => ipcRenderer.invoke("data:exportSession", id),
+        exportSessionMarkdown: (id: string) => ipcRenderer.invoke("data:exportSessionMarkdown", id),
+        getSessionMarkdown: (id: string): Promise<string | null> => ipcRenderer.invoke("data:getSessionMarkdown", id),
         exportAll: () => ipcRenderer.invoke("data:exportAll"),
         import: () => ipcRenderer.invoke("data:import"),
         getUserDataPath: () => ipcRenderer.invoke("data:getUserDataPath"),

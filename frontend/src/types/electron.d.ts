@@ -439,6 +439,8 @@ export interface ElectronApi {
   };
   data: {
     exportSession: (id: string) => Promise<{ success: boolean }>;
+    exportSessionMarkdown: (id: string) => Promise<{ success: boolean }>;
+    getSessionMarkdown: (id: string) => Promise<string | null>;
     exportAll: () => Promise<{ success: boolean }>;
     import: () => Promise<{ imported: number }>;
     getUserDataPath: () => Promise<string>;
