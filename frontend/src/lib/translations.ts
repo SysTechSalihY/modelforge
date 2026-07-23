@@ -164,6 +164,15 @@ export interface Dictionary {
     gpuAmdRocmNote: string;
     gpuIntelVulkanNote: string;
     gpuNoneDetectedNote: string;
+    otherBackendsSection: string;
+    otherBackendsHint: string;
+    rocmServerPathLabel: string;
+    rocmServerPathHint: string;
+    rocmPathSaved: string;
+    rocmPathCleared: string;
+    mlxModelsLabel: string;
+    mlxModelsHint: string;
+    mlxModelAdded: string;
     llamaCppNoModels: string;
     huggingFaceResults: string;
     huggingFaceResultsHint: string;
@@ -465,6 +474,15 @@ export const en: Dictionary = {
         "AMD GPUs are accelerated through Vulkan here. For native ROCm acceleration, run your models through the Ollama backend instead — it supports ROCm directly.",
     gpuIntelVulkanNote: "Intel GPUs (Arc and integrated) are accelerated through Vulkan.",
     gpuNoneDetectedNote: "No GPU detected — inference will run on the CPU.",
+    otherBackendsSection: "Other GPU backends (ROCm & MLX)",
+    otherBackendsHint: "Backends the built-in llama.cpp engine can't serve — run as local server processes the app manages for you.",
+    rocmServerPathLabel: "ROCm llama-server binary",
+    rocmServerPathHint: "Path to a ROCm (HIP) build of llama.cpp's llama-server — official llama.cpp releases ship one for AMD GPUs. Once set, your GGUF models appear under a ROCm group in the model picker.",
+    rocmPathSaved: "ROCm server path saved",
+    rocmPathCleared: "ROCm server path cleared",
+    mlxModelsLabel: "MLX models (Apple Silicon)",
+    mlxModelsHint: "Hugging Face model ids served via Python's mlx-lm (pip install mlx-lm). The app launches and manages the MLX server itself.",
+    mlxModelAdded: "MLX model added",
     llamaCppNoModels: "No GGUF models downloaded yet — search Hugging Face below and choose \"Download for llama.cpp\".",
     huggingFaceResults: "Hugging Face results",
     huggingFaceResultsHint: "Real search results from huggingface.co — expand a model to see its GGUF files.",
@@ -774,6 +792,15 @@ export const tr: Dictionary = {
         "AMD GPU'lar burada Vulkan üzerinden hızlandırılır. Yerel ROCm hızlandırması için modellerinizi ROCm'u doğrudan destekleyen Ollama arka ucu üzerinden çalıştırın.",
     gpuIntelVulkanNote: "Intel GPU'lar (Arc ve tümleşik) Vulkan üzerinden hızlandırılır.",
     gpuNoneDetectedNote: "GPU algılanmadı — çıkarım CPU üzerinde çalışacak.",
+    otherBackendsSection: "Diğer GPU arka uçları (ROCm ve MLX)",
+    otherBackendsHint: "Yerleşik llama.cpp motorunun sunamadığı arka uçlar — uygulamanın sizin için yönettiği yerel sunucu süreçleri olarak çalışır.",
+    rocmServerPathLabel: "ROCm llama-server ikili dosyası",
+    rocmServerPathHint: "llama.cpp'nin ROCm (HIP) derlemesi llama-server yolu — resmi llama.cpp sürümleri AMD GPU'lar için bir tane içerir. Ayarlandığında GGUF modelleriniz model seçicide ROCm grubu altında görünür.",
+    rocmPathSaved: "ROCm sunucu yolu kaydedildi",
+    rocmPathCleared: "ROCm sunucu yolu temizlendi",
+    mlxModelsLabel: "MLX modelleri (Apple Silicon)",
+    mlxModelsHint: "Python'un mlx-lm paketi ile sunulan Hugging Face model kimlikleri (pip install mlx-lm). Uygulama MLX sunucusunu kendisi başlatır ve yönetir.",
+    mlxModelAdded: "MLX modeli eklendi",
     llamaCppNoModels: "Henüz indirilmiş GGUF modeli yok — aşağıdan Hugging Face'te arayın ve \"llama.cpp için indir\"i seçin.",
     huggingFaceResults: "Hugging Face sonuçları",
     huggingFaceResultsHint: "huggingface.co'dan gerçek arama sonuçları — GGUF dosyalarını görmek için bir modeli genişletin.",

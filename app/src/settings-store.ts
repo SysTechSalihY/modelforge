@@ -79,6 +79,15 @@ export interface AppSettings {
     // in JS (command palette, shortcuts dialog) — this store doesn't
     // distinguish the two, it just persists whatever the renderer sends.
     keybindings?: Record<string, string>;
+    // MLX backend (Apple Silicon): Hugging Face repo ids (e.g.
+    // "mlx-community/Llama-3.2-3B-Instruct-4bit") or local paths served via
+    // `python -m mlx_lm.server`.
+    mlxModels?: string[];
+    // Python interpreter used to launch mlx_lm.server. Default: python3.
+    mlxPythonPath?: string;
+    // Path to a ROCm/HIP build of llama.cpp's llama-server binary — enables
+    // the "rocm" provider against the same GGUF dir as the llama.cpp backend.
+    rocmServerPath?: string;
 }
 
 const DEFAULTS: AppSettings = {

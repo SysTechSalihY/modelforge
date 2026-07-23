@@ -12,7 +12,12 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
     llamacpp: "llama.cpp (local)",
     gemini: "Gemini",
     custom: "Custom",
+    mlx: "MLX (Apple Silicon)",
+    rocm: "ROCm (AMD)",
 };
+
+// Providers that run models on this machine — no API key, no per-token cost.
+export const LOCAL_PROVIDERS: ProviderId[] = ["ollama", "llamacpp", "mlx", "rocm"];
 
 // Curated as of this app's last update — model lineups change often, so the
 // model picker also lets you type a custom model ID directly.
@@ -76,7 +81,7 @@ export function parseCustomModelId(modelId: string): { customProviderId: string;
     return { customProviderId: modelId.slice(0, sep), actualModel: modelId.slice(sep + 2) };
 }
 
-const VALID_PROVIDERS: ProviderId[] = ["ollama", "openai", "anthropic", "llamacpp", "gemini", "custom"];
+const VALID_PROVIDERS: ProviderId[] = ["ollama", "openai", "anthropic", "llamacpp", "gemini", "custom", "mlx", "rocm"];
 
 export function parseModelRef(ref: string): { provider: ProviderId; modelId: string } | null {
     const sepIndex = ref.indexOf(":");

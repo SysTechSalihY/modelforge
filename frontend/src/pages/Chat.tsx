@@ -61,7 +61,7 @@ import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, formatCustomModelRef, parseModelRef } from "@/lib/providers";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, LOCAL_PROVIDERS, formatModelRef, formatCustomModelRef, parseModelRef } from "@/lib/providers";
 import { estimateCost, formatCost } from "@/lib/pricing";
 import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
 import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
@@ -371,7 +371,7 @@ function formatUsage(usage: UsageInfo, provider: ProviderId | undefined, modelId
             ? `${(usage.completionTokens / (usage.elapsedMs / 1000)).toFixed(1)} tok/s`
             : null;
     const withSpeed = (label: string) => (speed ? `${label} · ${speed}` : label);
-    if (provider === "ollama" || provider === "llamacpp") return withSpeed(`${tokenLabel} · local`);
+    if (provider && LOCAL_PROVIDERS.includes(provider)) return withSpeed(`${tokenLabel} · local`);
     const cost = modelId ? estimateCost(modelId, usage.promptTokens, usage.completionTokens) : null;
     return withSpeed(cost !== null ? `${tokenLabel} · ~${formatCost(cost)}` : tokenLabel);
 }
@@ -1299,6 +1299,26 @@ export default function Chat() {
                                 <SelectLabel>llama.cpp (local)</SelectLabel>
                                 {llamaCppModels.map((m) => (
                                     <SelectItem key={m.name} value={formatModelRef("llamacpp", m.name)}>
+                                        {m.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        )}
+                        {(settings?.mlxModels ?? []).length > 0 && (
+                            <SelectGroup>
+                                <SelectLabel>MLX (Apple Silicon)</SelectLabel>
+                                {settings!.mlxModels!.map((id) => (
+                                    <SelectItem key={id} value={formatModelRef("mlx", id)}>
+                                        {id}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        )}
+                        {!!settings?.rocmServerPath && llamaCppModels.length > 0 && (
+                            <SelectGroup>
+                                <SelectLabel>ROCm (AMD)</SelectLabel>
+                                {llamaCppModels.map((m) => (
+                                    <SelectItem key={m.name} value={formatModelRef("rocm", m.name)}>
                                         {m.name}
                                     </SelectItem>
                                 ))}

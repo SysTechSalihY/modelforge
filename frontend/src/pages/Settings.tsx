@@ -151,6 +151,8 @@ export default function Settings() {
     const [activity, setActivity] = useState<AppActivity | null>(null);
     const [activityLoading, setActivityLoading] = useState(false);
     const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
+    const [mlxModelInput, setMlxModelInput] = useState("");
+    const [rocmPathInput, setRocmPathInput] = useState("");
     const [recordingAction, setRecordingAction] = useState<KeybindingAction | null>(null);
     const [keybindingConflict, setKeybindingConflict] = useState<string | null>(null);
     const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -213,6 +215,7 @@ export default function Settings() {
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
+            setRocmPathInput(s.rocmServerPath ?? "");
             setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings } as Record<KeybindingAction, string>);
             for (const provider of s.customProviders ?? []) {
                 window.api.secrets.has(`custom_${provider.id}_api_key`).then((has) =>
@@ -605,6 +608,26 @@ export default function Settings() {
         await window.api.settings.save(partial);
     }
 
+    async function addMlxModel() {
+        const id = mlxModelInput.trim();
+        if (!id || !settings) return;
+        const existing = settings.mlxModels ?? [];
+        if (existing.includes(id)) return;
+        await saveSettings({ mlxModels: [...existing, id] });
+        setMlxModelInput("");
+        toast.success(t.mlxModelAdded);
+    }
+
+    async function removeMlxModel(id: string) {
+        if (!settings) return;
+        await saveSettings({ mlxModels: (settings.mlxModels ?? []).filter((m) => m !== id) });
+    }
+
+    async function saveRocmPath() {
+        await saveSettings({ rocmServerPath: rocmPathInput.trim() || undefined });
+        toast.success(rocmPathInput.trim() ? t.rocmPathSaved : t.rocmPathCleared);
+    }
+
     async function connectMcpServer(server: McpServerConfig) {
         setMcpConnecting((c) => ({ ...c, [server.id]: true }));
         const res = await window.api.mcp.connect(server);
@@ -971,6 +994,57 @@ export default function Settings() {
                                 {llamaCppModels.length === 0 && (
                                     <p className="p-4 text-xs text-muted-foreground">{t.llamaCppNoModels}</p>
                                 )}
+                            </SettingsSection>
+                        )}
+
+                        {settings && (
+                            <SettingsSection title={t.otherBackendsSection} description={t.otherBackendsHint} className="mt-8">
+                                <SettingsRow label={t.rocmServerPathLabel} description={t.rocmServerPathHint} stacked>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Input
+                                            value={rocmPathInput}
+                                            onChange={(e) => setRocmPathInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && saveRocmPath()}
+                                            placeholder="/path/to/llama-server (ROCm build)"
+                                            className="h-8 w-96 max-w-full font-mono text-xs"
+                                        />
+                                        <Button size="sm" variant="outline" onClick={saveRocmPath}>
+                                            {t.save}
+                                        </Button>
+                                        {settings.rocmServerPath && <Badge variant="secondary">{t.enabled}</Badge>}
+                                    </div>
+                                </SettingsRow>
+                                <SettingsRow label={t.mlxModelsLabel} description={t.mlxModelsHint} stacked>
+                                    {(settings.mlxModels ?? []).length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            {settings.mlxModels!.map((id) => (
+                                                <div key={id} className="flex items-center justify-between gap-2">
+                                                    <span className="truncate font-mono text-xs">{id}</span>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => removeMlxModel(id)}
+                                                        aria-label={`Remove ${id}`}
+                                                    >
+                                                        <Trash2 className="size-3.5 text-destructive" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Input
+                                            value={mlxModelInput}
+                                            onChange={(e) => setMlxModelInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && addMlxModel()}
+                                            placeholder="mlx-community/Llama-3.2-3B-Instruct-4bit"
+                                            className="h-8 w-96 max-w-full font-mono text-xs"
+                                        />
+                                        <Button size="sm" variant="outline" onClick={addMlxModel} disabled={!mlxModelInput.trim()}>
+                                            <Plus className="size-3.5" /> {t.add}
+                                        </Button>
+                                    </div>
+                                </SettingsRow>
                             </SettingsSection>
                         )}
 
@@ -2231,6 +2305,15 @@ export default function Settings() {
                                                 : t.noModelsLoaded}
                                         </span>
                                     </SettingsRow>
+                                    {(activity.localBackendServers ?? []).length > 0 && (
+                                        <SettingsRow label="MLX / ROCm">
+                                            <span className="text-sm text-muted-foreground">
+                                                {activity.localBackendServers
+                                                    .map((s) => `${s.backend.toUpperCase()}: ${s.model.split(/[/\\]/).pop()}`)
+                                                    .join(", ")}
+                                            </span>
+                                        </SettingsRow>
+                                    )}
                                     <SettingsRow label={t.mcpServersLabel}>
                                         {Object.keys(activity.mcpServers).length > 0 ? (
                                             <div className="flex flex-wrap justify-end gap-1.5">

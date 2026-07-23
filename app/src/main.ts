@@ -20,6 +20,7 @@ import * as huggingface from "./huggingface";
 import * as llamacpp from "./llamacpp-manager";
 import * as scheduledTasksStore from "./scheduled-tasks-store";
 import * as scheduler from "./scheduler";
+import * as localServers from "./local-server-manager";
 import type { McpServerConfig } from "./mcp-client";
 import type { AttachedFile } from "./file-reader";
 import * as openaiProvider from "./providers/openai";
@@ -30,7 +31,7 @@ import { setupMenu } from "./menu";
 import { setupAutoUpdater, checkForUpdatesManually } from "./updater";
 import type { ChatMessage, ChatChunk, ChatOptions, ProviderId, ToolDefinition } from "./providers/types";
 
-const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp" | "custom">, string> = {
+const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp" | "custom" | "mlx" | "rocm">, string> = {
     openai: "openai_api_key",
     anthropic: "anthropic_api_key",
     gemini: "gemini_api_key",
@@ -184,6 +185,35 @@ async function dispatchChat(
     } else if (provider === "llamacpp") {
         const modelPath = path.join(getLlamaCppModelsDir(), model);
         await llamacpp.chat(modelPath, messages, options, onToken, signal, tools);
+    } else if (provider === "mlx" || provider === "rocm") {
+        const settings = settingsStore.getSettings();
+        // ROCm serves the same GGUF files as the llama.cpp backend, so the
+        // model ref is a filename that must stay inside the models dir; MLX
+        // models are HF repo ids the server resolves itself.
+        let serverModel = model;
+        if (provider === "rocm") {
+            const root = path.resolve(getLlamaCppModelsDir());
+            const resolved = path.resolve(root, model);
+            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+                throw new Error(`Model file "${model}" is outside the models directory.`);
+            }
+            serverModel = resolved;
+        }
+        const baseUrl = await localServers.ensureServer(provider, serverModel, {
+            mlxPythonPath: settings.mlxPythonPath,
+            rocmServerPath: settings.rocmServerPath,
+        });
+        // These servers are local and unauthenticated — the "api key" is a
+        // placeholder the OpenAI-compatible client requires but they ignore.
+        await createOpenAiCompatibleChat(`${baseUrl}/v1`, provider === "mlx" ? "MLX" : "ROCm llama-server")(
+            "local",
+            model,
+            messages,
+            options,
+            onToken,
+            signal,
+            tools
+        );
     } else if (provider === "custom") {
         // model is "<customProviderId>::<actual model id>" — see
         // frontend/src/lib/providers.ts's formatCustomModelRef.
@@ -354,6 +384,7 @@ function registerIpcHandlers(): void {
             ollamaRunning,
             ollamaLoadedModels,
             llamacppLoadedModels: llamacpp.listLoadedModels(),
+            localBackendServers: localServers.getRunningBackends(),
             mcpServers: mcpClient.getServerStatuses(),
             memory: { rssMB: +(mem.rss / 1e6).toFixed(1), heapUsedMB: +(mem.heapUsed / 1e6).toFixed(1) },
         };
@@ -720,10 +751,12 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
     ollama.stop();
+    localServers.stopAll();
     mcpClient.disconnectAll();
     if (process.platform !== "darwin") app.quit();
 });
 
 app.on("before-quit", () => {
     ollama.stop();
+    localServers.stopAll();
 });

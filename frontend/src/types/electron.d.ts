@@ -130,6 +130,7 @@ export interface AppActivity {
   ollamaRunning: boolean;
   ollamaLoadedModels: OllamaRunningModel[];
   llamacppLoadedModels: string[];
+  localBackendServers: { backend: "mlx" | "rocm"; model: string }[];
   mcpServers: Record<string, McpServerStatus>;
   memory: { rssMB: number; heapUsedMB: number };
 }
@@ -211,6 +212,9 @@ export interface AppSettings {
   customProviders?: CustomProviderConfig[];
   onboardingComplete?: boolean;
   keybindings?: Record<string, string>;
+  mlxModels?: string[];
+  mlxPythonPath?: string;
+  rocmServerPath?: string;
 }
 
 export interface ChatOptions {
@@ -309,7 +313,7 @@ export interface ImageAttachment {
 
 export type MediaAttachment = TextAttachment | ImageAttachment;
 
-export type ProviderId = "ollama" | "openai" | "anthropic" | "llamacpp" | "gemini" | "custom";
+export type ProviderId = "ollama" | "openai" | "anthropic" | "llamacpp" | "gemini" | "custom" | "mlx" | "rocm";
 
 export interface CustomProviderConfig {
   id: string;
