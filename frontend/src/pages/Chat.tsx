@@ -31,6 +31,10 @@ import {
     ScanText,
     Pin,
     GitFork,
+    CheckCircle2,
+    Circle,
+    ListChecks,
+    ShieldQuestion,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -96,7 +100,22 @@ const RAG_THRESHOLD_CHARS = 20_000;
 // Read-only tools are safe to let the model call repeatedly without a fresh
 // click each time — write_file and run_command always require explicit
 // per-call approval since they have real, potentially irreversible effects.
-const READ_ONLY_TOOLS = new Set(["read_file", "list_dir", "search_files", "git_status", "git_diff", "git_log"]);
+interface PlanStep {
+    text: string;
+    done: boolean;
+}
+
+const READ_ONLY_TOOLS = new Set([
+    "read_file",
+    "list_dir",
+    "search_files",
+    "git_status",
+    "git_diff",
+    "git_log",
+    "web_search",
+    "fetch_url",
+    "read_notes",
+]);
 
 // Vision models can already reason over any attached image — these just save
 // re-typing a good prompt for the common "I attached a diagram/wireframe"
@@ -388,6 +407,7 @@ export default function Chat() {
     const [pendingVariablePreset, setPendingVariablePreset] = useState<PromptPreset | null>(null);
     const [agentStepCount, setAgentStepCount] = useState(0);
     const [autoApprovedTools, setAutoApprovedTools] = useState<Set<string>>(new Set());
+    const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
     const [projectScripts, setProjectScripts] = useState<ProjectScripts>({});
     const [quickActionRunning, setQuickActionRunning] = useState(false);
     const [undoMessage, setUndoMessage] = useState<string | null>(null);
@@ -460,6 +480,7 @@ export default function Chat() {
             setAgentWorkspace(session.agentWorkspace ?? null);
             setPendingToolCalls([]);
             setAgentStepCount(0);
+            setPlanSteps([]);
             setAutoApprovedTools(new Set());
             setWriteDiffPreviews({});
             setUndoMessage(null);
@@ -849,13 +870,20 @@ export default function Chat() {
         window.api.app.setBusy(false);
         setMessages((finalMessages) => {
             const last = finalMessages[finalMessages.length - 1];
-            const hasPendingTools = !result.error && last?.role === "assistant" && last.toolCalls && last.toolCalls.length > 0;
-            if (hasPendingTools) {
-                setPendingToolCalls(last.toolCalls!);
+            const toolCalls = !result.error && last?.role === "assistant" ? (last.toolCalls ?? []) : [];
+            const planCalls = toolCalls.filter((c) => c.name === "set_plan");
+            const otherCalls = toolCalls.filter((c) => c.name !== "set_plan");
+
+            if (toolCalls.length > 0) {
+                // set_plan is a pure UI signal, applied immediately without a
+                // confirmation click — everything else still needs one.
+                setPendingToolCalls(otherCalls);
+                for (const call of planCalls) applyPlan(call);
                 // Tools the user already trusted this session skip the
                 // confirmation card and resolve themselves immediately.
-                for (const call of last.toolCalls!) {
-                    if (autoApprovedTools.has(call.name)) respondToToolCall(call, true);
+                // request_checkpoint always needs an explicit user choice.
+                for (const call of otherCalls) {
+                    if (call.name !== "request_checkpoint" && autoApprovedTools.has(call.name)) respondToToolCall(call, true);
                 }
             } else if (settings?.ttsAutoRead && !result.error && last?.role === "assistant" && last.content) {
                 const lastIndex = finalMessages.length - 1;
@@ -899,6 +927,26 @@ export default function Chat() {
         respondToToolCall(call, true);
     }
 
+    // Shared tail for every way a pending tool call can resolve (approved,
+    // denied, executed, or — for the client-only tools — answered without
+    // ever touching the workspace bridge): records the result and, once
+    // nothing else from this turn is still pending, hands control back to
+    // the model.
+    function resolveToolCall(call: ToolCall, resultText: string) {
+        setPendingToolCalls((prev) => {
+            const remaining = prev.filter((c) => c.id !== call.id);
+            setMessages((m) => {
+                const next: ChatMessage[] = [
+                    ...m,
+                    { role: "tool", content: resultText, toolCallId: call.id, toolName: call.name },
+                ];
+                if (remaining.length === 0) continueAfterTools(next);
+                return next;
+            });
+            return remaining;
+        });
+    }
+
     async function respondToToolCall(call: ToolCall, approve: boolean) {
         let resultText: string;
         if (!approve) {
@@ -913,19 +961,32 @@ export default function Chat() {
                   ? res.result
                   : JSON.stringify(res.result, null, 2);
         }
+        resolveToolCall(call, resultText);
+    }
 
-        setPendingToolCalls((prev) => {
-            const remaining = prev.filter((c) => c.id !== call.id);
-            setMessages((m) => {
-                const next: ChatMessage[] = [
-                    ...m,
-                    { role: "tool", content: resultText, toolCallId: call.id, toolName: call.name },
-                ];
-                if (remaining.length === 0) continueAfterTools(next);
-                return next;
-            });
-            return remaining;
-        });
+    // set_plan never shows a confirmation card — it's just the model telling
+    // the UI what its checklist looks like right now, so it's applied the
+    // instant the call arrives.
+    function applyPlan(call: ToolCall) {
+        const raw = Array.isArray(call.arguments.steps) ? call.arguments.steps : [];
+        const steps: PlanStep[] = raw.map((s) => ({
+            text: String((s as { text?: unknown })?.text ?? ""),
+            done: Boolean((s as { done?: unknown })?.done),
+        }));
+        setPlanSteps(steps);
+        resolveToolCall(call, "Plan updated.");
+    }
+
+    // request_checkpoint pauses the agent loop until the user picks one of
+    // these — unlike a normal tool call, "approve" and "deny" both continue
+    // the conversation, just with a different message back to the model.
+    function respondToCheckpoint(call: ToolCall, shouldContinue: boolean) {
+        resolveToolCall(
+            call,
+            shouldContinue
+                ? "The user reviewed this checkpoint and approved continuing."
+                : "The user asked to pause here rather than continue — stop and wait for further instructions."
+        );
     }
 
     function buildSystemMessages(): ChatMessage[] {
@@ -1011,6 +1072,7 @@ export default function Chat() {
         setRagFolders([]);
         setImageAttachments([]);
         setAgentStepCount(0);
+        setPlanSteps([]);
         await runCompletion(history, baseMessages, { isFirstMessage, titleSource });
     }
 
@@ -1637,6 +1699,26 @@ export default function Chat() {
                 </Popover>
             </div>
 
+            {planSteps.length > 0 && (
+                <div className="border-b border-border bg-muted/30 px-4 py-2">
+                    <div className="mx-auto flex max-w-3xl flex-col gap-1 2xl:max-w-4xl">
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <ListChecks className="size-3.5" /> {t.agentPlan}
+                        </p>
+                        {planSteps.map((step, i) => (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                                {step.done ? (
+                                    <CheckCircle2 className="size-3.5 shrink-0 text-primary" />
+                                ) : (
+                                    <Circle className="size-3.5 shrink-0 text-muted-foreground" />
+                                )}
+                                <span className={cn(step.done && "text-muted-foreground line-through")}>{step.text}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <div className="relative flex-1 overflow-hidden">
             <ScrollArea viewportRef={viewportRef} className="h-full">
                 <div className="mx-auto flex max-w-3xl flex-col gap-5 p-6 2xl:max-w-4xl">
@@ -1666,6 +1748,35 @@ export default function Chat() {
                         />
                     ))}
                     {pendingToolCalls.map((call) => {
+                        if (call.name === "request_checkpoint") {
+                            const summary = String(call.arguments.summary ?? "");
+                            const question = call.arguments.question ? String(call.arguments.question) : null;
+                            return (
+                                <div
+                                    key={call.id}
+                                    className="flex max-w-[85%] flex-col gap-2 self-start rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm"
+                                >
+                                    <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                                        <ShieldQuestion className="size-3.5" /> {t.agentCheckpoint}
+                                    </div>
+                                    <p>{summary}</p>
+                                    {question && <p className="text-muted-foreground">{question}</p>}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button size="sm" onClick={() => respondToCheckpoint(call, true)} className="gap-1.5">
+                                            <Check className="size-3.5" /> {t.continueAgent}
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => respondToCheckpoint(call, false)}
+                                            className="gap-1.5"
+                                        >
+                                            <Square className="size-3.5" /> {t.stopAgent}
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        }
                         const isWrite = call.name === "write_file";
                         const preview = writeDiffPreviews[call.id];
                         const newContent = String(call.arguments.content ?? "");

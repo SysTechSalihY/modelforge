@@ -121,6 +121,80 @@ export const AGENT_TOOLS: ToolDefinition[] = [
             required: ["message"],
         },
     },
+    {
+        name: "web_search",
+        description: "Search the web for a query and return the top results (title, URL, snippet). Use this to find information not available locally.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "The search query." },
+            },
+            required: ["query"],
+        },
+    },
+    {
+        name: "fetch_url",
+        description: "Fetch a web page by URL and return its readable text content (HTML tags stripped). Use after web_search to read a specific result, or for any URL the user provides.",
+        parameters: {
+            type: "object",
+            properties: {
+                url: { type: "string", description: "The full URL to fetch, including https://." },
+            },
+            required: ["url"],
+        },
+    },
+    {
+        name: "read_notes",
+        description: "Read the agent's persistent notes for this workspace — a scratchpad for tracking long-running context, decisions, or progress across turns and sessions. Empty if nothing has been written yet.",
+        parameters: { type: "object", properties: {}, required: [] },
+    },
+    {
+        name: "write_notes",
+        description: "Overwrite the agent's persistent notes for this workspace with the given content. Use this to record progress, decisions, or context worth remembering later in a long task — write the full notes each time, not just an addition.",
+        parameters: {
+            type: "object",
+            properties: {
+                content: { type: "string", description: "The full notes content to save, replacing whatever was there before." },
+            },
+            required: ["content"],
+        },
+    },
+    {
+        name: "set_plan",
+        description:
+            "Declare or update a step-by-step plan for the current task, shown to the user as a checklist. Call this once at the start of any multi-step task, then call it again (with the full updated list) whenever a step is completed or the plan changes. Always pass the complete list, not just changes.",
+        parameters: {
+            type: "object",
+            properties: {
+                steps: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            text: { type: "string", description: "Short description of this step." },
+                            done: { type: "boolean", description: "Whether this step is already complete." },
+                        },
+                        required: ["text", "done"],
+                    },
+                    description: "The full, ordered list of steps.",
+                },
+            },
+            required: ["steps"],
+        },
+    },
+    {
+        name: "request_checkpoint",
+        description:
+            "Pause and ask the user to confirm before continuing — use this after finishing a meaningful chunk of work or before starting something risky/irreversible, so the user can review progress rather than only finding out at the very end.",
+        parameters: {
+            type: "object",
+            properties: {
+                summary: { type: "string", description: "What's been done so far, in a sentence or two." },
+                question: { type: "string", description: "What you'd like to confirm before continuing (optional)." },
+            },
+            required: ["summary"],
+        },
+    },
 ];
 
 const MAX_READ_CHARS = 100_000;
@@ -387,6 +461,110 @@ export async function gitCommit(workspaceRoot: string, message: string): Promise
     return gitCommand(workspaceRoot, `commit -m ${JSON.stringify(message)}`);
 }
 
+const WEB_FETCH_TIMEOUT_MS = 15_000;
+const MAX_FETCH_CHARS = 30_000;
+const MAX_SEARCH_RESULTS_WEB = 5;
+
+// Crude HTML-to-text: drop non-content tags outright, then strip remaining
+// markup and collapse whitespace. Not a real HTML parser — good enough for
+// giving a model readable page text without pulling in a DOM library in the
+// main process.
+function htmlToText(html: string): string {
+    return html
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<!--[\s\S]*?-->/g, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s*\n+/g, "\n\n")
+        .trim();
+}
+
+export async function fetchUrl(url: string): Promise<string> {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        throw new Error(`"${url}" is not a valid URL.`);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Only http:// and https:// URLs can be fetched.");
+    }
+
+    const res = await fetch(parsed, {
+        signal: AbortSignal.timeout(WEB_FETCH_TIMEOUT_MS),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Modelforge/1.0)" },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch ${url}: HTTP ${res.status}`);
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    const text = contentType.includes("html") ? htmlToText(raw) : raw;
+    return text.length > MAX_FETCH_CHARS
+        ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated — page is ${text.length} characters]`
+        : text;
+}
+
+export interface WebSearchResult {
+    title: string;
+    url: string;
+    snippet: string;
+}
+
+// Uses DuckDuckGo's keyless HTML endpoint (no API key/signup needed, unlike
+// most search APIs) and regex-scrapes the result markup — brittle if DDG
+// changes its HTML, but keeps this tool usable out of the box with zero
+// configuration, consistent with the rest of Agent mode's tools.
+export async function webSearch(query: string): Promise<WebSearchResult[]> {
+    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+        signal: AbortSignal.timeout(WEB_FETCH_TIMEOUT_MS),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Modelforge/1.0)" },
+    });
+    if (!res.ok) throw new Error(`Web search failed: HTTP ${res.status}`);
+    const html = await res.text();
+
+    const results: WebSearchResult[] = [];
+    const linkPattern = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const snippetPattern = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    const links = [...html.matchAll(linkPattern)];
+    const snippets = [...html.matchAll(snippetPattern)];
+
+    for (let i = 0; i < links.length && results.length < MAX_SEARCH_RESULTS_WEB; i++) {
+        const href = links[i][1];
+        // DuckDuckGo's HTML endpoint wraps result URLs in a redirect
+        // (/l/?uddg=<encoded target>) rather than linking straight to them.
+        const uddgMatch = href.match(/[?&]uddg=([^&]+)/);
+        const url = uddgMatch ? decodeURIComponent(uddgMatch[1]) : href;
+        results.push({
+            title: htmlToText(links[i][2]),
+            url,
+            snippet: htmlToText(snippets[i]?.[1] ?? ""),
+        });
+    }
+    return results;
+}
+
+function notesPath(): string {
+    return ".agent-notes.md";
+}
+
+export function readNotes(workspaceRoot: string): string {
+    try {
+        return readFile(workspaceRoot, notesPath());
+    } catch {
+        return "";
+    }
+}
+
+export function writeNotes(workspaceRoot: string, content: string): { bytesWritten: number } {
+    return writeFile(workspaceRoot, notesPath(), content);
+}
+
 export interface ProjectScripts {
     test?: string;
     lint?: string;
@@ -436,6 +614,14 @@ export async function executeTool(workspaceRoot: string, name: string, args: Rec
             return gitLog(workspaceRoot, typeof args.count === "number" ? args.count : 10);
         case "git_commit":
             return gitCommit(workspaceRoot, String(args.message ?? ""));
+        case "web_search":
+            return webSearch(String(args.query ?? ""));
+        case "fetch_url":
+            return fetchUrl(String(args.url ?? ""));
+        case "read_notes":
+            return readNotes(workspaceRoot);
+        case "write_notes":
+            return writeNotes(workspaceRoot, String(args.content ?? ""));
         default:
             throw new Error(`Unknown tool: ${name}`);
     }

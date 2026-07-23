@@ -17,6 +17,9 @@ import {
     gitDiff,
     gitLog,
     gitCommit,
+    readNotes,
+    writeNotes,
+    fetchUrl,
 } from "./agent-tools";
 
 describe("agent-tools", () => {
@@ -163,6 +166,33 @@ describe("agent-tools", () => {
             fs.writeFileSync(path.join(workspace, "node_modules", "lib.js"), "findme");
             const results = searchFiles(workspace, "findme");
             expect(results).toEqual([]);
+        });
+    });
+
+    describe("notes", () => {
+        it("returns an empty string when no notes have been written yet", () => {
+            expect(readNotes(workspace)).toBe("");
+        });
+
+        it("round-trips written notes", () => {
+            writeNotes(workspace, "step 1 done\nstep 2 in progress");
+            expect(readNotes(workspace)).toBe("step 1 done\nstep 2 in progress");
+        });
+
+        it("overwrites rather than appends on a second write", () => {
+            writeNotes(workspace, "first");
+            writeNotes(workspace, "second");
+            expect(readNotes(workspace)).toBe("second");
+        });
+    });
+
+    describe("fetchUrl", () => {
+        it("rejects a malformed URL", async () => {
+            await expect(fetchUrl("not a url")).rejects.toThrow(/not a valid URL/);
+        });
+
+        it("rejects a non-http(s) protocol", async () => {
+            await expect(fetchUrl("file:///etc/passwd")).rejects.toThrow(/http:\/\/ and https:\/\//);
         });
     });
 

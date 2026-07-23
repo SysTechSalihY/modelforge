@@ -27,6 +27,10 @@ export interface Dictionary {
     alwaysAllowThisSession: string;
     agentStep: string;
     agentStepTooltip: string;
+    agentPlan: string;
+    agentCheckpoint: string;
+    continueAgent: string;
+    stopAgent: string;
     ollamaServer: string;
     serverAddress: string;
     serverAddressHelp: string;
@@ -305,6 +309,10 @@ export const en: Dictionary = {
     alwaysAllowThisSession: "Always allow this session",
     agentStep: "Agent step",
     agentStepTooltip: "How many automatic tool-result → model-continuation round trips have happened for this turn.",
+    agentPlan: "Plan",
+    agentCheckpoint: "Checkpoint",
+    continueAgent: "Continue",
+    stopAgent: "Stop here",
     ollamaServer: "Ollama server",
     serverAddress: "Server address",
     serverAddressHelp:
@@ -592,6 +600,10 @@ export const tr: Dictionary = {
     alwaysAllowThisSession: "Bu oturumda her zaman izin ver",
     agentStep: "Ajan adımı",
     agentStepTooltip: "Bu tur için kaç otomatik araç sonucu → model devamı gidiş-dönüşü gerçekleşti.",
+    agentPlan: "Plan",
+    agentCheckpoint: "Kontrol noktası",
+    continueAgent: "Devam et",
+    stopAgent: "Burada dur",
     ollamaServer: "Ollama sunucusu",
     serverAddress: "Sunucu adresi",
     serverAddressHelp:
