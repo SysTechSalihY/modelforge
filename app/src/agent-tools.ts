@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "./providers/types";
 import { getAccountToken } from "./accounts";
+import { capturePageScreenshot } from "./browser-capture";
 
 const execAsync = promisify(exec);
 
@@ -290,6 +291,60 @@ export const AGENT_TOOLS: ToolDefinition[] = [
                 url: { type: "string", description: "The full URL to fetch, including https://." },
             },
             required: ["url"],
+        },
+    },
+    {
+        name: "http_request",
+        description:
+            "Make an HTTP request to any URL with a chosen method, headers, and body, and return the response status and body. Use this for calling REST APIs — fetch_url is for reading web pages, this is for actual API calls (GET/POST/PUT/PATCH/DELETE). Requires explicit approval, like write_file, since it can have side effects on external systems.",
+        parameters: {
+            type: "object",
+            properties: {
+                url: { type: "string", description: "The full URL to request, including https://." },
+                method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"], description: "Defaults to GET." },
+                headers: { type: "object", properties: {}, description: "Request headers as a flat object of string values." },
+                body: { type: "string", description: "Raw request body, e.g. a JSON string. Omit for GET/DELETE." },
+            },
+            required: ["url"],
+        },
+    },
+    {
+        name: "capture_page_screenshot",
+        description:
+            "Load a URL in a hidden browser window and return a screenshot of the rendered page as an image. Use this to visually inspect a web page or a local dev server (e.g. http://localhost:3000) — fetch_url only gives you the HTML/text, not what it actually looks like.",
+        parameters: {
+            type: "object",
+            properties: {
+                url: { type: "string", description: "The full URL to load, including http:// or https://." },
+                width: { type: "number", description: "Viewport width in pixels. Defaults to 1280." },
+                height: { type: "number", description: "Viewport height in pixels. Defaults to 800." },
+            },
+            required: ["url"],
+        },
+    },
+    {
+        name: "find_symbol_references",
+        description:
+            "Find where a function, class, variable, or other identifier is defined and referenced across the workspace. Faster and more targeted than search_files for navigating code — use this before editing something to see everywhere it's used.",
+        parameters: {
+            type: "object",
+            properties: {
+                symbol: { type: "string", description: "The identifier to search for (e.g. a function or class name)." },
+                path: { type: "string", description: 'Subdirectory to scope the search to, relative to the workspace root. Defaults to "."' },
+            },
+            required: ["symbol"],
+        },
+    },
+    {
+        name: "apply_patch",
+        description:
+            "Apply a unified diff (the format produced by `git diff` / `diff -u`) across one or more files in a single call, instead of one replace_in_file call per file. Use this for multi-file refactors or when you already have a precise diff in mind. Requires explicit approval, like write_file.",
+        parameters: {
+            type: "object",
+            properties: {
+                patch: { type: "string", description: "The unified diff text, with --- /+++ file headers and @@ hunks." },
+            },
+            required: ["patch"],
         },
     },
     {
@@ -623,6 +678,61 @@ export function searchFiles(workspaceRoot: string, query: string, relativePath =
     return results;
 }
 
+// Escapes a symbol name for safe use inside a RegExp — a symbol containing
+// regex metacharacters (e.g. from a typo'd argument) shouldn't throw or,
+// worse, behave like an unintended pattern.
+function escapeRegExp(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Word-boundary matching over the same directory walk as searchFiles, but
+// scoped to whole identifiers — "count" won't also match "recount" or
+// "counter", which a plain substring search (searchFiles) would.
+export function findSymbolReferences(workspaceRoot: string, symbol: string, relativePath = "."): SearchMatch[] {
+    const startDir = resolveSafePath(workspaceRoot, relativePath);
+    const pattern = new RegExp(`\\b${escapeRegExp(symbol)}\\b`);
+    const results: SearchMatch[] = [];
+
+    function walk(dir: string): void {
+        if (results.length >= MAX_SEARCH_RESULTS) return;
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (results.length >= MAX_SEARCH_RESULTS) return;
+            if (entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name)) continue;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(full);
+                continue;
+            }
+            if (!entry.isFile()) continue;
+            let text: string;
+            try {
+                text = fs.readFileSync(full, "utf-8");
+            } catch {
+                continue; // binary or unreadable — skip
+            }
+            const lines = text.split("\n");
+            for (let i = 0; i < lines.length && results.length < MAX_SEARCH_RESULTS; i++) {
+                if (pattern.test(lines[i])) {
+                    results.push({
+                        file: path.relative(workspaceRoot, full).split(path.sep).join("/"),
+                        line: i + 1,
+                        text: lines[i].trim().slice(0, 200),
+                    });
+                }
+            }
+        }
+    }
+
+    walk(startDir);
+    return results;
+}
+
 // Defense in depth for `run_command`: the workspace-root sandboxing above
 // only constrains our own read_file/write_file/list_dir/search_files
 // implementations, which build and validate paths themselves. A shell
@@ -890,6 +1000,172 @@ export async function fetchUrl(url: string): Promise<string> {
         : text;
 }
 
+const MAX_HTTP_BODY_CHARS = 20_000;
+
+export async function httpRequest(
+    url: string,
+    method = "GET",
+    headers?: Record<string, string>,
+    body?: string
+): Promise<string> {
+    let parsed: URL;
+    try {
+        parsed = new URL(url);
+    } catch {
+        throw new Error(`"${url}" is not a valid URL.`);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Only http:// and https:// URLs can be requested.");
+    }
+
+    const res = await fetch(parsed, {
+        method,
+        headers,
+        body: method !== "GET" && method !== "DELETE" ? body : undefined,
+        signal: AbortSignal.timeout(WEB_FETCH_TIMEOUT_MS),
+    });
+    const text = await res.text();
+    const truncated =
+        text.length > MAX_HTTP_BODY_CHARS
+            ? `${text.slice(0, MAX_HTTP_BODY_CHARS)}\n[truncated — body is ${text.length} characters]`
+            : text;
+    return `HTTP ${res.status} ${res.statusText}\n--- body ---\n${truncated || "(empty body)"}`;
+}
+
+// --- apply_patch: a minimal unified-diff parser/applier -------------------
+// Supports the subset git diff / `diff -u` actually produce: multiple
+// --- /+++ file header pairs, one or more @@ hunks each, context/add/remove
+// lines, and /dev/null on either side for creates/deletes. No fuzzy
+// matching — a hunk whose context doesn't match the file's current content
+// throws rather than guessing, since silently misapplying a patch is worse
+// than failing loudly.
+
+interface PatchHunkLine {
+    type: "context" | "add" | "remove";
+    text: string;
+}
+
+interface PatchHunk {
+    oldStart: number;
+    lines: PatchHunkLine[];
+}
+
+interface FilePatch {
+    oldPath: string | null;
+    newPath: string | null;
+    hunks: PatchHunk[];
+}
+
+function stripDiffPathPrefix(p: string): string {
+    return p.replace(/^[ab]\//, "");
+}
+
+function parseUnifiedDiff(patchText: string): FilePatch[] {
+    // A trailing "\n" (the normal case for patch text) produces one extra
+    // empty element from split() that's just a string-terminator artifact,
+    // not an actual blank line in the diff — without dropping it, it gets
+    // parsed as a spurious empty context line at the end of the last hunk.
+    const lines = patchText.replace(/\n$/, "").split("\n");
+    const files: FilePatch[] = [];
+    let i = 0;
+    while (i < lines.length) {
+        if (!lines[i].startsWith("--- ")) {
+            i++;
+            continue;
+        }
+        const oldHeader = lines[i].slice(4).trim();
+        i++;
+        if (i >= lines.length || !lines[i].startsWith("+++ ")) {
+            throw new Error(`Malformed patch: expected a "+++ " line after "--- ${oldHeader}".`);
+        }
+        const newHeader = lines[i].slice(4).trim();
+        i++;
+        const oldPath = oldHeader === "/dev/null" ? null : stripDiffPathPrefix(oldHeader.split("\t")[0]);
+        const newPath = newHeader === "/dev/null" ? null : stripDiffPathPrefix(newHeader.split("\t")[0]);
+
+        const hunks: PatchHunk[] = [];
+        while (i < lines.length && lines[i].startsWith("@@")) {
+            const match = lines[i].match(/^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/);
+            if (!match) throw new Error(`Malformed hunk header: "${lines[i]}"`);
+            const oldStart = Number(match[1]);
+            i++;
+            const hunkLines: PatchHunkLine[] = [];
+            while (i < lines.length && !lines[i].startsWith("@@") && !lines[i].startsWith("--- ")) {
+                const line = lines[i];
+                if (line.startsWith("+")) hunkLines.push({ type: "add", text: line.slice(1) });
+                else if (line.startsWith("-")) hunkLines.push({ type: "remove", text: line.slice(1) });
+                else if (line.startsWith(" ")) hunkLines.push({ type: "context", text: line.slice(1) });
+                else if (line.startsWith("\\")) {
+                    // "\ No newline at end of file" — not a content line.
+                } else if (line === "") {
+                    hunkLines.push({ type: "context", text: "" });
+                } else {
+                    break;
+                }
+                i++;
+            }
+            hunks.push({ oldStart, lines: hunkLines });
+        }
+        files.push({ oldPath, newPath, hunks });
+    }
+    return files;
+}
+
+function applyHunksToContent(content: string, hunks: PatchHunk[], filePath: string): string {
+    const originalLines = content.length > 0 ? content.split("\n") : [];
+    const result: string[] = [];
+    let cursor = 0;
+
+    for (const hunk of hunks) {
+        // "@@ -0,0 ..." is the convention for a hunk against an empty/new
+        // file — oldStart is 0 there, not a real 1-based line number.
+        const startIdx = Math.max(0, hunk.oldStart - 1);
+        if (startIdx < cursor || startIdx > originalLines.length) {
+            throw new Error(`Hunk in "${filePath}" doesn't align with the file's current content (expected to start at line ${hunk.oldStart}).`);
+        }
+        result.push(...originalLines.slice(cursor, startIdx));
+        let oldCursor = startIdx;
+        for (const line of hunk.lines) {
+            if (line.type === "add") {
+                result.push(line.text);
+                continue;
+            }
+            const actual = originalLines[oldCursor];
+            if (actual !== line.text) {
+                throw new Error(
+                    `Context mismatch in "${filePath}" at line ${oldCursor + 1}: expected ${JSON.stringify(line.text)}, found ${JSON.stringify(actual ?? "<end of file>")}.`
+                );
+            }
+            if (line.type === "context") result.push(line.text);
+            oldCursor++;
+        }
+        cursor = oldCursor;
+    }
+    result.push(...originalLines.slice(cursor));
+    return result.join("\n");
+}
+
+export function applyPatch(workspaceRoot: string, patchText: string): { filesChanged: string[] } {
+    const files = parseUnifiedDiff(patchText);
+    if (files.length === 0) throw new Error("No valid file patches found in the given diff.");
+
+    const filesChanged: string[] = [];
+    for (const file of files) {
+        if (file.newPath === null) {
+            if (!file.oldPath) throw new Error("Patch deletes a file but its path (/dev/null on both sides) is missing.");
+            deletePath(workspaceRoot, file.oldPath, false);
+            filesChanged.push(file.oldPath);
+            continue;
+        }
+        const isNewFile = file.oldPath === null;
+        const existingContent = isNewFile ? "" : readFile(workspaceRoot, file.newPath);
+        const newContent = applyHunksToContent(existingContent, file.hunks, file.newPath);
+        writeFile(workspaceRoot, file.newPath, newContent);
+        filesChanged.push(file.newPath);
+    }
+    return { filesChanged };
+}
+
 export interface WebSearchResult {
     title: string;
     url: string;
@@ -1118,6 +1394,24 @@ export async function executeTool(workspaceRoot: string, name: string, args: Rec
             return githubReadFile(String(args.repository ?? ""), String(args.path ?? ""), args.ref ? String(args.ref) : undefined);
         case "fetch_url":
             return fetchUrl(String(args.url ?? ""));
+        case "http_request":
+            return httpRequest(
+                String(args.url ?? ""),
+                args.method ? String(args.method) : "GET",
+                args.headers && typeof args.headers === "object" ? (args.headers as Record<string, string>) : undefined,
+                args.body ? String(args.body) : undefined
+            );
+        case "capture_page_screenshot":
+            return capturePageScreenshot(
+                workspaceRoot,
+                String(args.url ?? ""),
+                typeof args.width === "number" ? args.width : undefined,
+                typeof args.height === "number" ? args.height : undefined
+            );
+        case "find_symbol_references":
+            return findSymbolReferences(workspaceRoot, String(args.symbol ?? ""), args.path ? String(args.path) : ".");
+        case "apply_patch":
+            return applyPatch(workspaceRoot, String(args.patch ?? ""));
         case "read_notes":
             return readNotes(workspaceRoot);
         case "write_notes":

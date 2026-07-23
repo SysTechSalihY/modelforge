@@ -31,6 +31,9 @@ import {
     stopBackgroundCommand,
     listBackgroundCommands,
     killAllBackgroundCommands,
+    httpRequest,
+    findSymbolReferences,
+    applyPatch,
 } from "./agent-tools";
 
 function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
@@ -268,6 +271,113 @@ describe("agent-tools", () => {
 
         it("rejects a non-http(s) protocol", async () => {
             await expect(fetchUrl("file:///etc/passwd")).rejects.toThrow(/http:\/\/ and https:\/\//);
+        });
+    });
+
+    describe("httpRequest", () => {
+        it("rejects a malformed URL", async () => {
+            await expect(httpRequest("not a url")).rejects.toThrow(/not a valid URL/);
+        });
+
+        it("rejects a non-http(s) protocol", async () => {
+            await expect(httpRequest("ftp://example.com")).rejects.toThrow(/http:\/\/ and https:\/\//);
+        });
+    });
+
+    describe("findSymbolReferences", () => {
+        it("matches whole identifiers only, not substrings", () => {
+            fs.writeFileSync(path.join(workspace, "code.ts"), "const count = 1;\nconst recount = 2;\nfunction counter() {}\n");
+            const results = findSymbolReferences(workspace, "count");
+            expect(results).toEqual([{ file: "code.ts", line: 1, text: "const count = 1;" }]);
+        });
+
+        it("finds every reference across multiple lines and files", () => {
+            fs.writeFileSync(path.join(workspace, "a.ts"), "function greet() {}\ngreet();\n");
+            fs.mkdirSync(path.join(workspace, "sub"));
+            fs.writeFileSync(path.join(workspace, "sub", "b.ts"), "import { greet } from '../a';\ngreet();\n");
+            const results = findSymbolReferences(workspace, "greet");
+            expect(results.length).toBe(4);
+        });
+
+        it("returns nothing for a symbol that isn't used anywhere", () => {
+            fs.writeFileSync(path.join(workspace, "code.ts"), "const x = 1;\n");
+            expect(findSymbolReferences(workspace, "doesNotExist")).toEqual([]);
+        });
+    });
+
+    describe("applyPatch", () => {
+        it("applies a single-hunk edit to an existing file", () => {
+            fs.writeFileSync(path.join(workspace, "greet.txt"), "line one\nline two\nline three\n");
+            const patch = [
+                "--- a/greet.txt",
+                "+++ b/greet.txt",
+                "@@ -1,3 +1,3 @@",
+                " line one",
+                "-line two",
+                "+line TWO",
+                " line three",
+                "",
+            ].join("\n");
+            const result = applyPatch(workspace, patch);
+            expect(result.filesChanged).toEqual(["greet.txt"]);
+            expect(fs.readFileSync(path.join(workspace, "greet.txt"), "utf-8")).toBe("line one\nline TWO\nline three\n");
+        });
+
+        it("creates a new file from a /dev/null patch", () => {
+            const patch = [
+                "--- /dev/null",
+                "+++ b/new.txt",
+                "@@ -0,0 +1,2 @@",
+                "+hello",
+                "+world",
+                "",
+            ].join("\n");
+            applyPatch(workspace, patch);
+            expect(fs.readFileSync(path.join(workspace, "new.txt"), "utf-8")).toBe("hello\nworld");
+        });
+
+        it("deletes a file when the new side is /dev/null", () => {
+            fs.writeFileSync(path.join(workspace, "gone.txt"), "bye\n");
+            const patch = ["--- a/gone.txt", "+++ /dev/null", "@@ -1,1 +0,0 @@", "-bye", ""].join("\n");
+            applyPatch(workspace, patch);
+            expect(fs.existsSync(path.join(workspace, "gone.txt"))).toBe(false);
+        });
+
+        it("applies edits across multiple files in one patch", () => {
+            fs.writeFileSync(path.join(workspace, "a.txt"), "alpha\n");
+            fs.writeFileSync(path.join(workspace, "b.txt"), "beta\n");
+            const patch = [
+                "--- a/a.txt",
+                "+++ b/a.txt",
+                "@@ -1,1 +1,1 @@",
+                "-alpha",
+                "+ALPHA",
+                "--- a/b.txt",
+                "+++ b/b.txt",
+                "@@ -1,1 +1,1 @@",
+                "-beta",
+                "+BETA",
+                "",
+            ].join("\n");
+            const result = applyPatch(workspace, patch);
+            expect(result.filesChanged.sort()).toEqual(["a.txt", "b.txt"]);
+            expect(fs.readFileSync(path.join(workspace, "a.txt"), "utf-8")).toBe("ALPHA\n");
+            expect(fs.readFileSync(path.join(workspace, "b.txt"), "utf-8")).toBe("BETA\n");
+        });
+
+        it("throws when the hunk's context doesn't match the file's actual content", () => {
+            fs.writeFileSync(path.join(workspace, "drifted.txt"), "actual content\n");
+            const patch = ["--- a/drifted.txt", "+++ b/drifted.txt", "@@ -1,1 +1,1 @@", "-expected content", "+new content", ""].join("\n");
+            expect(() => applyPatch(workspace, patch)).toThrow(/Context mismatch/);
+        });
+
+        it("throws on a patch with no valid file headers", () => {
+            expect(() => applyPatch(workspace, "not a real patch")).toThrow(/No valid file patches/);
+        });
+
+        it("respects the workspace sandbox for patched file paths", () => {
+            const patch = ["--- /dev/null", "+++ b/../../etc/evil.txt", "@@ -0,0 +1,1 @@", "+pwned", ""].join("\n");
+            expect(() => applyPatch(workspace, patch)).toThrow(/outside the workspace/);
         });
     });
 

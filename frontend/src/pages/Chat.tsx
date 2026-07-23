@@ -137,6 +137,8 @@ const READ_ONLY_TOOLS = new Set([
     "github_read_file",
     "get_background_output",
     "list_background_commands",
+    "capture_page_screenshot",
+    "find_symbol_references",
 ]);
 
 // Vision models can already reason over any attached image — these just save
