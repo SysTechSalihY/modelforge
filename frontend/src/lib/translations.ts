@@ -307,6 +307,55 @@ export interface Dictionary {
     chat: string;
     data: string;
     delete: string;
+    settingsSubtitle: string;
+    searchSettingsPlaceholder: string;
+    warmModelCache: string;
+    warmModelCacheHint: string;
+    warmModelCacheOption1: string;
+    warmModelCacheOption2: string;
+    warmModelCacheOption3: string;
+    warmModelCacheOption4: string;
+    interfaceDensity: string;
+    interfaceDensityHint: string;
+    densityComfortable: string;
+    densityCompact: string;
+    reduceMotionLabel: string;
+    reduceMotionHint: string;
+    localRuntimesTitle: string;
+    localRuntimesHint: string;
+    runtimeStateRunning: string;
+    runtimeStateReady: string;
+    runtimeStateUnsupported: string;
+    runtimeStateNotInstalled: string;
+    runtimeStateChecking: string;
+    runtimeDetecting: string;
+    setupGuide: string;
+    refreshRuntimes: string;
+    localModelLibraryTitle: string;
+    localModelLibraryHint: string;
+    localModelLibraryEmpty: string;
+    recommendedForRuntimes: string;
+    addModelButton: string;
+    hfModelIdPlaceholder: string;
+    agentRuntimeTitle: string;
+    agentRuntimeHint: string;
+    maxToolStepsLabel: string;
+    maxToolStepsHint: string;
+    recommendedProfileLabel: string;
+    profileCautious: string;
+    profileCautiousNote: string;
+    profileBalanced: string;
+    profileBalancedNote: string;
+    profileAutonomous: string;
+    profileAutonomousNote: string;
+    connectedAccountsTitle: string;
+    connectedAccountsHint: string;
+    accountGithubHint: string;
+    accountHuggingfaceHint: string;
+    accountConnected: string;
+    accountDisconnect: string;
+    accountConnect: string;
+    accountTokenHint: string;
 }
 
 export const en: Dictionary = {
@@ -626,6 +675,55 @@ export const en: Dictionary = {
     chat: "Chat",
     data: "Data",
     delete: "Delete",
+    settingsSubtitle: "Configure models, integrations, automation, and your workspace.",
+    searchSettingsPlaceholder: "Search settings…",
+    warmModelCache: "Warm model cache",
+    warmModelCacheHint: "Maximum llama.cpp model variants retained in RAM/VRAM. Lower values save memory; higher values make model switching faster.",
+    warmModelCacheOption1: "1 model · minimum memory",
+    warmModelCacheOption2: "2 models · balanced",
+    warmModelCacheOption3: "3 models · faster switching",
+    warmModelCacheOption4: "4 models · workstation",
+    interfaceDensity: "Interface density",
+    interfaceDensityHint: "Choose how much information fits on screen.",
+    densityComfortable: "Comfortable",
+    densityCompact: "Compact",
+    reduceMotionLabel: "Reduce motion",
+    reduceMotionHint: "Minimize animations and smooth transitions for accessibility.",
+    localRuntimesTitle: "Local inference runtimes",
+    localRuntimesHint: "The app discovers and manages compatible GPU engines automatically. Choose models below; paths and server commands stay out of the normal workflow.",
+    runtimeStateRunning: "Running",
+    runtimeStateReady: "Ready",
+    runtimeStateUnsupported: "Unsupported",
+    runtimeStateNotInstalled: "Not installed",
+    runtimeStateChecking: "Checking",
+    runtimeDetecting: "Detecting the local runtime…",
+    setupGuide: "Setup guide",
+    refreshRuntimes: "Refresh runtimes",
+    localModelLibraryTitle: "Local model library",
+    localModelLibraryHint: "Add a recommended model once, then select it directly from Chat. The runtime downloads model weights from Hugging Face on first launch.",
+    localModelLibraryEmpty: "Your managed model library is empty. Add a recommended model below.",
+    recommendedForRuntimes: "Recommended for your runtimes",
+    addModelButton: "Add model",
+    hfModelIdPlaceholder: "Paste a Hugging Face model ID",
+    agentRuntimeTitle: "Agent runtime",
+    agentRuntimeHint: "Control how independently Agent Mode can work before returning control to you.",
+    maxToolStepsLabel: "Maximum tool steps per turn",
+    maxToolStepsHint: "Stops runaway tool loops. Larger values suit long repository analysis; smaller values provide more frequent checkpoints.",
+    recommendedProfileLabel: "Recommended profile",
+    profileCautious: "Cautious",
+    profileCautiousNote: "Frequent user review",
+    profileBalanced: "Balanced",
+    profileBalancedNote: "Best default",
+    profileAutonomous: "Autonomous",
+    profileAutonomousNote: "Long coding tasks",
+    connectedAccountsTitle: "Connected accounts",
+    connectedAccountsHint: "Link developer services for repository analysis and access to private or gated models. Tokens stay encrypted locally when your OS credential store is available.",
+    accountGithubHint: "Connect repositories for AI analysis and developer workflows.",
+    accountHuggingfaceHint: "Access private and gated model repositories available to your account.",
+    accountConnected: "Connected",
+    accountDisconnect: "Disconnect",
+    accountConnect: "Connect",
+    accountTokenHint: "Use a fine-grained, read-only token unless a workflow specifically needs write access.",
 };
 
 export const tr: Dictionary = {
@@ -946,6 +1044,55 @@ export const tr: Dictionary = {
     chat: "Sohbet",
     data: "Veri",
     delete: "Sil",
+    settingsSubtitle: "Modelleri, entegrasyonları, otomasyonu ve çalışma alanınızı yapılandırın.",
+    searchSettingsPlaceholder: "Ayarlarda ara…",
+    warmModelCache: "Sıcak model önbelleği",
+    warmModelCacheHint: "RAM/VRAM'de tutulan maksimum llama.cpp model varyantı. Düşük değerler bellekten tasarruf sağlar; yüksek değerler model değişimini hızlandırır.",
+    warmModelCacheOption1: "1 model · minimum bellek",
+    warmModelCacheOption2: "2 model · dengeli",
+    warmModelCacheOption3: "3 model · daha hızlı geçiş",
+    warmModelCacheOption4: "4 model · iş istasyonu",
+    interfaceDensity: "Arayüz yoğunluğu",
+    interfaceDensityHint: "Ekrana ne kadar bilgi sığacağını seçin.",
+    densityComfortable: "Rahat",
+    densityCompact: "Kompakt",
+    reduceMotionLabel: "Hareketi azalt",
+    reduceMotionHint: "Erişilebilirlik için animasyonları ve yumuşak geçişleri en aza indirin.",
+    localRuntimesTitle: "Yerel çıkarım çalışma zamanları",
+    localRuntimesHint: "Uygulama uyumlu GPU motorlarını otomatik olarak keşfeder ve yönetir. Aşağıdan model seçin; yollar ve sunucu komutları normal iş akışının dışında kalır.",
+    runtimeStateRunning: "Çalışıyor",
+    runtimeStateReady: "Hazır",
+    runtimeStateUnsupported: "Desteklenmiyor",
+    runtimeStateNotInstalled: "Kurulu değil",
+    runtimeStateChecking: "Kontrol ediliyor",
+    runtimeDetecting: "Yerel çalışma zamanı algılanıyor…",
+    setupGuide: "Kurulum kılavuzu",
+    refreshRuntimes: "Çalışma zamanlarını yenile",
+    localModelLibraryTitle: "Yerel model kitaplığı",
+    localModelLibraryHint: "Önerilen bir modeli bir kez ekleyin, ardından doğrudan Sohbet'ten seçin. Çalışma zamanı model ağırlıklarını ilk başlatmada Hugging Face'ten indirir.",
+    localModelLibraryEmpty: "Yönetilen model kitaplığınız boş. Aşağıdan önerilen bir model ekleyin.",
+    recommendedForRuntimes: "Çalışma zamanlarınız için önerilen",
+    addModelButton: "Model ekle",
+    hfModelIdPlaceholder: "Bir Hugging Face model kimliği yapıştırın",
+    agentRuntimeTitle: "Ajan çalışma zamanı",
+    agentRuntimeHint: "Ajan Modu'nun size kontrolü geri vermeden önce ne kadar bağımsız çalışabileceğini kontrol edin.",
+    maxToolStepsLabel: "Tur başına maksimum araç adımı",
+    maxToolStepsHint: "Kaçak araç döngülerini durdurur. Büyük değerler uzun depo analizine uygundur; küçük değerler daha sık kontrol noktası sağlar.",
+    recommendedProfileLabel: "Önerilen profil",
+    profileCautious: "Temkinli",
+    profileCautiousNote: "Sık kullanıcı incelemesi",
+    profileBalanced: "Dengeli",
+    profileBalancedNote: "En iyi varsayılan",
+    profileAutonomous: "Özerk",
+    profileAutonomousNote: "Uzun kodlama görevleri",
+    connectedAccountsTitle: "Bağlı hesaplar",
+    connectedAccountsHint: "Depo analizi ve özel veya kısıtlı modellere erişim için geliştirici hizmetlerini bağlayın. İşletim sistemi kimlik bilgisi deposu kullanılabildiğinde jetonlar yerel olarak şifreli kalır.",
+    accountGithubHint: "Yapay zeka analizi ve geliştirici iş akışları için depoları bağlayın.",
+    accountHuggingfaceHint: "Hesabınıza sunulan özel ve kısıtlı model depolarına erişin.",
+    accountConnected: "Bağlandı",
+    accountDisconnect: "Bağlantıyı kes",
+    accountConnect: "Bağlan",
+    accountTokenHint: "Bir iş akışı özellikle yazma erişimi gerektirmedikçe ince taneli, salt okunur bir jeton kullanın.",
 };
 
 export const DICTIONARIES: Record<Locale, Dictionary> = { en, tr };

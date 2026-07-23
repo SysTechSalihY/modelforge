@@ -901,10 +901,10 @@ export default function Settings() {
             <div className="mx-auto max-w-5xl px-4 pb-20 pt-16 sm:px-6 md:pt-8 2xl:max-w-6xl">
                 <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                     <div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"><Settings2 className="size-5" /></span>
-                    <div><h1 className="text-2xl font-semibold tracking-tight">{t.settings}</h1><p className="mt-0.5 text-xs text-muted-foreground">Configure models, integrations, automation, and your workspace.</p></div></div>
+                    <div><h1 className="text-2xl font-semibold tracking-tight">{t.settings}</h1><p className="mt-0.5 text-xs text-muted-foreground">{t.settingsSubtitle}</p></div></div>
                     <div className="relative w-full sm:w-72">
                         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input value={settingsQuery} onChange={(e) => setSettingsQuery(e.target.value)} placeholder="Search settings…" className="h-10 rounded-xl bg-card pl-9 shadow-sm" aria-label="Search settings" />
+                        <Input value={settingsQuery} onChange={(e) => setSettingsQuery(e.target.value)} placeholder={t.searchSettingsPlaceholder} className="h-10 rounded-xl bg-card pl-9 shadow-sm" aria-label={t.searchSettingsPlaceholder} />
                     </div>
                 </div>
 
@@ -1061,14 +1061,14 @@ export default function Settings() {
                                         );
                                     })()}
                                 </SettingsRow>
-                                <SettingsRow label="Warm model cache" description="Maximum llama.cpp model variants retained in RAM/VRAM. Lower values save memory; higher values make model switching faster.">
+                                <SettingsRow label={t.warmModelCache} description={t.warmModelCacheHint}>
                                     <Select value={String(settings.llamaCppMaxCachedModels ?? 2)} onValueChange={(v) => saveSettings({ llamaCppMaxCachedModels: Number(v) })}>
                                         <SelectTrigger size="sm" className="w-44"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="1">1 model · minimum memory</SelectItem>
-                                            <SelectItem value="2">2 models · balanced</SelectItem>
-                                            <SelectItem value="3">3 models · faster switching</SelectItem>
-                                            <SelectItem value="4">4 models · workstation</SelectItem>
+                                            <SelectItem value="1">{t.warmModelCacheOption1}</SelectItem>
+                                            <SelectItem value="2">{t.warmModelCacheOption2}</SelectItem>
+                                            <SelectItem value="3">{t.warmModelCacheOption3}</SelectItem>
+                                            <SelectItem value="4">{t.warmModelCacheOption4}</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </SettingsRow>
@@ -1114,8 +1114,8 @@ export default function Settings() {
                         {settings && (
                             <>
                                 <SettingsSection
-                                    title="Local inference runtimes"
-                                    description="ModelForge discovers and manages compatible GPU engines automatically. Choose models below; paths and server commands stay out of the normal workflow."
+                                    title={t.localRuntimesTitle}
+                                    description={t.localRuntimesHint}
                                     className="mt-8"
                                 >
                                     <div className="grid gap-3 p-4 md:grid-cols-3">
@@ -1124,25 +1124,40 @@ export default function Settings() {
                                             const Icon = meta.icon;
                                             const status = runtimeStatuses.find((item) => item.backend === backend);
                                             const stateLabel = status?.running
-                                                ? "Running"
+                                                ? t.runtimeStateRunning
                                                 : status?.installed
-                                                  ? "Ready"
+                                                  ? t.runtimeStateReady
                                                   : status && !status.compatible
-                                                    ? "Unsupported"
+                                                    ? t.runtimeStateUnsupported
                                                     : status
-                                                      ? "Not installed"
-                                                      : "Checking";
+                                                      ? t.runtimeStateNotInstalled
+                                                      : t.runtimeStateChecking;
                                             return (
                                                 <div key={backend} className="rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm">
                                                     <div className="flex items-start justify-between gap-3">
-                                                        <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" /></span>
-                                                        <Badge variant={status?.running || status?.installed ? "default" : "secondary"}>{stateLabel}</Badge>
+                                                        <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                                            <Icon className="size-5" />
+                                                        </span>
+                                                        <Badge variant={status?.running || status?.installed ? "default" : "secondary"}>
+                                                            {stateLabel}
+                                                        </Badge>
                                                     </div>
                                                     <h3 className="mt-3 font-semibold">{meta.label}</h3>
-                                                    <p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">{status?.detail ?? "Detecting the local runtime…"}</p>
-                                                    {status?.model && <p className="mt-2 truncate font-mono text-[11px] text-primary">{status.model.split(/[/\\]/).pop()}</p>}
-                                                    <a href={meta.docs} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-                                                        Setup guide <ExternalLink className="size-3" />
+                                                    <p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">
+                                                        {status?.detail ?? t.runtimeDetecting}
+                                                    </p>
+                                                    {status?.model && (
+                                                        <p className="mt-2 truncate font-mono text-[11px] text-primary">
+                                                            {status.model.split(/[/\\]/).pop()}
+                                                        </p>
+                                                    )}
+                                                    <a
+                                                        href={meta.docs}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                                    >
+                                                        {t.setupGuide} <ExternalLink className="size-3" />
                                                     </a>
                                                 </div>
                                             );
@@ -1150,19 +1165,22 @@ export default function Settings() {
                                     </div>
                                     <div className="flex justify-end border-t border-border/60 px-4 py-3">
                                         <Button size="sm" variant="outline" onClick={refreshRuntimeStatuses} disabled={runtimeRefreshing}>
-                                            <RefreshCw className={cn("size-3.5", runtimeRefreshing && "animate-spin")} /> Refresh runtimes
+                                            <RefreshCw className={cn("size-3.5", runtimeRefreshing && "animate-spin")} /> {t.refreshRuntimes}
                                         </Button>
                                     </div>
                                 </SettingsSection>
 
                                 <SettingsSection
-                                    title="Local model library"
-                                    description="Add a recommended model once, then select it directly from Chat. The runtime downloads model weights from Hugging Face on first launch."
+                                    title={t.localModelLibraryTitle}
+                                    description={t.localModelLibraryHint}
                                     className="mt-8"
                                 >
                                     {((settings.mlxModels?.length ?? 0) + (settings.vllmModels?.length ?? 0)) > 0 ? (
                                         <div className="grid gap-2 p-4 sm:grid-cols-2">
-                                            {([...(settings.mlxModels ?? []).map((id) => ({ backend: "mlx" as const, id })), ...(settings.vllmModels ?? []).map((id) => ({ backend: "vllm" as const, id }))]).map(({ backend, id }) => (
+                                            {[
+                                                ...(settings.mlxModels ?? []).map((id) => ({ backend: "mlx" as const, id })),
+                                                ...(settings.vllmModels ?? []).map((id) => ({ backend: "vllm" as const, id })),
+                                            ].map(({ backend, id }) => (
                                                 <div key={`${backend}:${id}`} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-muted/25 p-3">
                                                     <Badge variant="outline" className="shrink-0">{RUNTIME_META[backend].label}</Badge>
                                                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{id}</span>
@@ -1173,10 +1191,12 @@ export default function Settings() {
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="p-4 text-sm text-muted-foreground">Your managed model library is empty. Add a recommended model below.</p>
+                                        <p className="p-4 text-sm text-muted-foreground">{t.localModelLibraryEmpty}</p>
                                     )}
                                     <div className="border-t border-border/60 p-4">
-                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommended for your runtimes</p>
+                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                            {t.recommendedForRuntimes}
+                                        </p>
                                         <div className="grid gap-2 sm:grid-cols-2">
                                             {MANAGED_MODEL_CATALOG.map((model) => {
                                                 const added = (settings[model.backend === "mlx" ? "mlxModels" : "vllmModels"] ?? []).includes(model.id);
@@ -1188,8 +1208,13 @@ export default function Settings() {
                                                         onClick={() => addManagedModel(model.backend, model.id)}
                                                         className="flex items-center gap-3 rounded-xl border border-border/70 p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-default disabled:opacity-60"
                                                     >
-                                                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{RUNTIME_META[model.backend].label}</span>
-                                                        <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{model.label}</span><span className="block truncate text-xs text-muted-foreground">{model.note}</span></span>
+                                                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                                                            {RUNTIME_META[model.backend].label}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="block text-sm font-medium">{model.label}</span>
+                                                            <span className="block truncate text-xs text-muted-foreground">{model.note}</span>
+                                                        </span>
                                                         {added ? <Check className="size-4 text-primary" /> : <Plus className="size-4" />}
                                                     </button>
                                                 );
@@ -1197,11 +1222,24 @@ export default function Settings() {
                                         </div>
                                         <div className="mt-4 flex flex-col gap-2 rounded-xl bg-muted/35 p-3 sm:flex-row">
                                             <Select value={localModelBackend} onValueChange={(value) => setLocalModelBackend(value as "mlx" | "vllm")}>
-                                                <SelectTrigger size="sm" className="w-full sm:w-28"><SelectValue /></SelectTrigger>
-                                                <SelectContent><SelectItem value="mlx">MLX</SelectItem><SelectItem value="vllm">vLLM</SelectItem></SelectContent>
+                                                <SelectTrigger size="sm" className="w-full sm:w-28">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="mlx">MLX</SelectItem>
+                                                    <SelectItem value="vllm">vLLM</SelectItem>
+                                                </SelectContent>
                                             </Select>
-                                            <Input value={localModelInput} onChange={(event) => setLocalModelInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addManagedModel(localModelBackend)} placeholder="Paste a Hugging Face model ID" className="h-8 flex-1 text-xs" />
-                                            <Button size="sm" onClick={() => addManagedModel(localModelBackend)} disabled={!localModelInput.trim()}><Plus className="size-3.5" /> Add model</Button>
+                                            <Input
+                                                value={localModelInput}
+                                                onChange={(event) => setLocalModelInput(event.target.value)}
+                                                onKeyDown={(event) => event.key === "Enter" && addManagedModel(localModelBackend)}
+                                                placeholder={t.hfModelIdPlaceholder}
+                                                className="h-8 flex-1 text-xs"
+                                            />
+                                            <Button size="sm" onClick={() => addManagedModel(localModelBackend)} disabled={!localModelInput.trim()}>
+                                                <Plus className="size-3.5" /> {t.addModelButton}
+                                            </Button>
                                         </div>
                                     </div>
                                 </SettingsSection>
@@ -1244,15 +1282,31 @@ export default function Settings() {
                                     ))}
                                 </div>
                             </SettingsRow>
-                            <SettingsRow label="Interface density" description="Choose how much information fits on screen.">
+                            <SettingsRow label={t.interfaceDensity} description={t.interfaceDensityHint}>
                                 <Select value={settings?.uiDensity ?? "comfortable"} onValueChange={(v) => saveSettings({ uiDensity: v as "comfortable" | "compact" })}>
-                                    <SelectTrigger size="sm" className="w-40"><SelectValue /></SelectTrigger>
-                                    <SelectContent><SelectItem value="comfortable">Comfortable</SelectItem><SelectItem value="compact">Compact</SelectItem></SelectContent>
+                                    <SelectTrigger size="sm" className="w-40">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="comfortable">{t.densityComfortable}</SelectItem>
+                                        <SelectItem value="compact">{t.densityCompact}</SelectItem>
+                                    </SelectContent>
                                 </Select>
                             </SettingsRow>
-                            <SettingsRow label="Reduce motion" description="Minimize animations and smooth transitions for accessibility.">
-                                <button type="button" role="switch" aria-checked={settings?.reduceMotion ?? false} onClick={() => saveSettings({ reduceMotion: !(settings?.reduceMotion ?? false) })} className={cn("relative h-6 w-11 rounded-full transition-colors", settings?.reduceMotion ? "bg-primary" : "bg-muted")}>
-                                    <span className={cn("absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform", settings?.reduceMotion ? "translate-x-5" : "translate-x-0.5")} />
+                            <SettingsRow label={t.reduceMotionLabel} description={t.reduceMotionHint}>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={settings?.reduceMotion ?? false}
+                                    onClick={() => saveSettings({ reduceMotion: !(settings?.reduceMotion ?? false) })}
+                                    className={cn("relative h-6 w-11 rounded-full transition-colors", settings?.reduceMotion ? "bg-primary" : "bg-muted")}
+                                >
+                                    <span
+                                        className={cn(
+                                            "absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform",
+                                            settings?.reduceMotion ? "translate-x-5" : "translate-x-0.5"
+                                        )}
+                                    />
                                 </button>
                             </SettingsRow>
                         </SettingsSection>
@@ -1911,10 +1965,7 @@ export default function Settings() {
 
                     <TabsContent value="accounts" className="min-w-0 flex-1 flex flex-col gap-8">
                         <div>
-                            <SettingsSection
-                                title="Connected accounts"
-                                description="Link developer services for repository analysis and access to private or gated models. Tokens stay encrypted locally when your OS credential store is available."
-                            >
+                            <SettingsSection title={t.connectedAccountsTitle} description={t.connectedAccountsHint}>
                                 {(["github", "huggingface"] as const).map((provider) => {
                                     const account = linkedAccounts[provider];
                                     const label = provider === "github" ? "GitHub" : "Hugging Face";
@@ -1922,15 +1973,23 @@ export default function Settings() {
                                         <SettingsRow
                                             key={provider}
                                             label={label}
-                                            description={provider === "huggingface" ? "Access private and gated model repositories available to your account." : "Connect repositories for AI analysis and developer workflows."}
+                                            description={provider === "huggingface" ? t.accountHuggingfaceHint : t.accountGithubHint}
                                             stacked
                                         >
                                             {account ? (
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    {account.avatarUrl && <img src={account.avatarUrl} alt="" className="size-8 rounded-full" loading="lazy" />}
-                                                    <a href={account.profileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">@{account.username}</a>
-                                                    <Badge variant="secondary"><Check className="mr-1 size-3" /> Connected</Badge>
-                                                    <Button size="sm" variant="outline" onClick={() => disconnectAccount(provider)}>Disconnect</Button>
+                                                    {account.avatarUrl && (
+                                                        <img src={account.avatarUrl} alt="" className="size-8 rounded-full" loading="lazy" />
+                                                    )}
+                                                    <a href={account.profileUrl} target="_blank" rel="noreferrer" className="text-sm font-medium hover:underline">
+                                                        @{account.username}
+                                                    </a>
+                                                    <Badge variant="secondary">
+                                                        <Check className="mr-1 size-3" /> {t.accountConnected}
+                                                    </Badge>
+                                                    <Button size="sm" variant="outline" onClick={() => disconnectAccount(provider)}>
+                                                        {t.accountDisconnect}
+                                                    </Button>
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col gap-2">
@@ -1943,11 +2002,16 @@ export default function Settings() {
                                                             aria-label={`${label} access token`}
                                                             className="h-8 text-xs"
                                                         />
-                                                        <Button size="sm" variant="outline" onClick={() => connectAccount(provider)} disabled={!accountTokens[provider].trim() || accountConnecting === provider}>
-                                                            {accountConnecting === provider && <Loader2 className="mr-1 size-3 animate-spin" />} Connect
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => connectAccount(provider)}
+                                                            disabled={!accountTokens[provider].trim() || accountConnecting === provider}
+                                                        >
+                                                            {accountConnecting === provider && <Loader2 className="mr-1 size-3 animate-spin" />} {t.accountConnect}
                                                         </Button>
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground">Use a fine-grained, read-only token unless a workflow specifically needs write access.</p>
+                                                    <p className="text-xs text-muted-foreground">{t.accountTokenHint}</p>
                                                 </div>
                                             )}
                                         </SettingsRow>
@@ -2345,19 +2409,40 @@ export default function Settings() {
                                     </SettingsRow>
                                 </SettingsSection>
 
-                                <SettingsSection title="Agent runtime" description="Control how independently Agent Mode can work before returning control to you." className="mt-8">
-                                    <SettingsRow label="Maximum tool steps per turn" description="Stops runaway tool loops. Larger values suit long repository analysis; smaller values provide more frequent checkpoints.">
-                                        <Input type="number" min={5} max={100} step={5} value={settings.agentMaxSteps ?? 25} onChange={(e) => saveSettings({ agentMaxSteps: Math.max(5, Math.min(Number(e.target.value), 100)) })} className="w-24" aria-label="Maximum agent tool steps" />
+                                <SettingsSection title={t.agentRuntimeTitle} description={t.agentRuntimeHint} className="mt-8">
+                                    <SettingsRow label={t.maxToolStepsLabel} description={t.maxToolStepsHint}>
+                                        <Input
+                                            type="number"
+                                            min={5}
+                                            max={100}
+                                            step={5}
+                                            value={settings.agentMaxSteps ?? 25}
+                                            onChange={(e) => saveSettings({ agentMaxSteps: Math.max(5, Math.min(Number(e.target.value), 100)) })}
+                                            className="w-24"
+                                            aria-label={t.maxToolStepsLabel}
+                                        />
                                     </SettingsRow>
-                                    <SettingsRow label="Recommended profile" stacked>
+                                    <SettingsRow label={t.recommendedProfileLabel} stacked>
                                         <div className="grid gap-2 sm:grid-cols-3">
                                             {[
-                                                { label: "Cautious", value: 10, note: "Frequent user review" },
-                                                { label: "Balanced", value: 25, note: "Best default" },
-                                                { label: "Autonomous", value: 50, note: "Long coding tasks" },
+                                                { label: t.profileCautious, value: 10, note: t.profileCautiousNote },
+                                                { label: t.profileBalanced, value: 25, note: t.profileBalancedNote },
+                                                { label: t.profileAutonomous, value: 50, note: t.profileAutonomousNote },
                                             ].map((profile) => (
-                                                <button key={profile.label} onClick={() => saveSettings({ agentMaxSteps: profile.value })} className={cn("rounded-xl border p-3 text-left transition-colors", (settings.agentMaxSteps ?? 25) === profile.value ? "border-primary/40 bg-primary/5" : "border-border hover:bg-muted/50")}>
-                                                    <span className="block text-sm font-medium">{profile.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{profile.value} steps · {profile.note}</span>
+                                                <button
+                                                    key={profile.label}
+                                                    onClick={() => saveSettings({ agentMaxSteps: profile.value })}
+                                                    className={cn(
+                                                        "rounded-xl border p-3 text-left transition-colors",
+                                                        (settings.agentMaxSteps ?? 25) === profile.value
+                                                            ? "border-primary/40 bg-primary/5"
+                                                            : "border-border hover:bg-muted/50"
+                                                    )}
+                                                >
+                                                    <span className="block text-sm font-medium">{profile.label}</span>
+                                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                                        {profile.value} steps · {profile.note}
+                                                    </span>
                                                 </button>
                                             ))}
                                         </div>
