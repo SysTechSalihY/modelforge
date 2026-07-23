@@ -35,6 +35,7 @@ import type { ChatOptions, ChatSession, Project, PromptPreset } from "@/types/el
 import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
 import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
 import { DEFAULT_KEYBINDINGS, matchesBinding, subscribeKeybindings, type KeybindingAction } from "@/lib/keybindings";
+import { formatRelativeTime } from "@/lib/format-time";
 
 function SessionRow({
     session,
@@ -68,17 +69,30 @@ function SessionRow({
         <div
             onClick={onOpen}
             className={cn(
-                "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted",
-                active ? "bg-muted text-foreground" : "text-muted-foreground"
+                "group relative flex cursor-pointer items-center gap-2 rounded-lg border-l-2 px-2 py-2 text-sm transition-colors",
+                active
+                    ? "border-primary bg-muted text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/60"
             )}
         >
             <MessageSquare className="size-3.5 shrink-0" />
             <span className="flex-1 truncate">{session.title}</span>
             {tags.length > 0 && (
-                <span className="hidden shrink-0 truncate text-[10px] text-muted-foreground sm:inline">
-                    {tags.map((tg) => `#${tg}`).join(" ")}
+                <span className="hidden shrink-0 items-center gap-1 sm:flex">
+                    {tags.slice(0, 2).map((tg) => (
+                        <span
+                            key={tg}
+                            className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground group-hover:bg-background"
+                        >
+                            {tg}
+                        </span>
+                    ))}
+                    {tags.length > 2 && <span className="text-[10px] text-muted-foreground">+{tags.length - 2}</span>}
                 </span>
             )}
+            <span className="hidden shrink-0 text-[10px] tabular-nums text-muted-foreground/70 group-hover:hidden sm:inline">
+                {formatRelativeTime(session.updatedAt)}
+            </span>
             <Popover>
                 <PopoverTrigger
                     render={
@@ -475,7 +489,7 @@ function ProjectGroup({
                 </Popover>
             </div>
             {!collapsed && (
-                <div className="ml-4 flex flex-col gap-0.5 border-l border-border pl-2">
+                <div className="ml-4 flex flex-col gap-1 border-l border-border pl-2">
                     {sessions.length === 0 && (
                         <p className="px-2 py-1 text-xs text-muted-foreground">No chats yet.</p>
                     )}
