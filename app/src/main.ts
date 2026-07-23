@@ -779,6 +779,7 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {
     ollama.stop();
     localServers.stopAll();
+    agentTools.killAllBackgroundCommands();
     mcpClient.disconnectAll();
     if (process.platform !== "darwin") app.quit();
 });
@@ -786,5 +787,6 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
     ollama.stop();
     localServers.stopAll();
+    agentTools.killAllBackgroundCommands();
     void llamacpp.dispose();
 });

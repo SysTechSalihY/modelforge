@@ -535,8 +535,15 @@ export default function Layout() {
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-
-    useEffect(() => setSidebarOpen(false), [sessionId]);
+    // Closes the mobile sidebar on navigating to a session — adjusted during
+    // render (not an effect) per React's "resetting state when a prop
+    // changes" pattern, since the reset needs to happen before the closed
+    // sidebar's first paint rather than flash open-then-closed.
+    const [prevSessionId, setPrevSessionId] = useState(sessionId);
+    if (sessionId !== prevSessionId) {
+        setPrevSessionId(sessionId);
+        setSidebarOpen(false);
+    }
 
     useEffect(() => {
         if (!hasApi) return;

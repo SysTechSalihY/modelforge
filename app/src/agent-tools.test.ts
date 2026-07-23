@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -26,7 +26,24 @@ import {
     readNotes,
     writeNotes,
     fetchUrl,
+    startBackgroundCommand,
+    getBackgroundOutput,
+    stopBackgroundCommand,
+    listBackgroundCommands,
+    killAllBackgroundCommands,
 } from "./agent-tools";
+
+function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+    const start = Date.now();
+    return new Promise((resolve, reject) => {
+        const check = () => {
+            if (predicate()) return resolve();
+            if (Date.now() - start > timeoutMs) return reject(new Error("waitFor timed out"));
+            setTimeout(check, 20);
+        };
+        check();
+    });
+}
 
 describe("agent-tools", () => {
     let workspace: string;
@@ -313,6 +330,59 @@ describe("agent-tools", () => {
             await runCode(workspace, "javascript", "1+1");
             const after = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith("modelforge-code-"));
             expect(after.length).toBe(before.length);
+        });
+    });
+
+    describe("background commands", () => {
+        afterEach(() => {
+            killAllBackgroundCommands();
+        });
+
+        it("starts a command and returns a task id immediately", () => {
+            const { taskId, name } = startBackgroundCommand(workspace, "echo hello-background");
+            expect(taskId).toBeTruthy();
+            expect(name).toBe("echo hello-background");
+        });
+
+        it("captures output as the command runs and reports its exit", async () => {
+            const { taskId } = startBackgroundCommand(workspace, "echo from-bg-task");
+            await waitFor(() => getBackgroundOutput(taskId).includes("exited with code 0"));
+            const output = getBackgroundOutput(taskId);
+            expect(output).toContain("from-bg-task");
+            expect(output).toContain("exited with code 0");
+        });
+
+        it("reports a still-running task as running, not exited", () => {
+            const { taskId } = startBackgroundCommand(workspace, "sleep 5");
+            expect(getBackgroundOutput(taskId)).toContain("running");
+        });
+
+        it("stops a running task on request", async () => {
+            const { taskId } = startBackgroundCommand(workspace, "sleep 30");
+            const result = stopBackgroundCommand(taskId);
+            expect(result).toContain("stopped");
+            await waitFor(() => getBackgroundOutput(taskId).includes("exited"));
+        });
+
+        it("lists all started tasks with their status", () => {
+            const a = startBackgroundCommand(workspace, "echo a");
+            const b = startBackgroundCommand(workspace, "echo b");
+            const list = listBackgroundCommands();
+            expect(list.map((t) => t.id)).toEqual(expect.arrayContaining([a.taskId, b.taskId]));
+        });
+
+        it("throws for an unknown task id", () => {
+            expect(() => getBackgroundOutput("does-not-exist")).toThrow(/No background task/);
+            expect(() => stopBackgroundCommand("does-not-exist")).toThrow(/No background task/);
+        });
+
+        it("blocks a dangerous command from ever starting", () => {
+            expect(() => startBackgroundCommand(workspace, "sudo rm -rf /")).toThrow(/blocked/);
+        });
+
+        it("caps the number of concurrently running background tasks", () => {
+            for (let i = 0; i < 5; i++) startBackgroundCommand(workspace, "sleep 5", ".", `task-${i}`);
+            expect(() => startBackgroundCommand(workspace, "sleep 5")).toThrow(/Already running/);
         });
     });
 

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { exec } from "node:child_process";
+import { exec, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "./providers/types";
@@ -152,6 +152,47 @@ export const AGENT_TOOLS: ToolDefinition[] = [
             },
             required: ["language", "code"],
         },
+    },
+    {
+        name: "start_background_command",
+        description:
+            "Start a long-running command (dev server, build watcher, long test run) in the background and return immediately with a task id. Use get_background_output to check on it later and stop_background_command when done — unlike run_command, this doesn't block or time out. Subject to the same safety checks as run_command.",
+        parameters: {
+            type: "object",
+            properties: {
+                command: { type: "string", description: "The shell command to run." },
+                cwd: { type: "string", description: 'Working directory, relative to the workspace root. Defaults to "."' },
+                name: { type: "string", description: "Short human-readable label for this task (e.g. \"dev server\")." },
+            },
+            required: ["command"],
+        },
+    },
+    {
+        name: "get_background_output",
+        description: "Get the current status and recent output of a background command started with start_background_command.",
+        parameters: {
+            type: "object",
+            properties: {
+                task_id: { type: "string", description: "The task id returned by start_background_command." },
+            },
+            required: ["task_id"],
+        },
+    },
+    {
+        name: "stop_background_command",
+        description: "Stop a running background command by its task id.",
+        parameters: {
+            type: "object",
+            properties: {
+                task_id: { type: "string", description: "The task id returned by start_background_command." },
+            },
+            required: ["task_id"],
+        },
+    },
+    {
+        name: "list_background_commands",
+        description: "List all background commands from this session with their status.",
+        parameters: { type: "object", properties: {}, required: [] },
     },
     {
         name: "git_status",
@@ -679,6 +720,105 @@ export async function runCode(
     }
 }
 
+interface BackgroundTask {
+    id: string;
+    name: string;
+    command: string;
+    process: ChildProcess;
+    // Rolling tail of combined stdout+stderr — capped so a chatty dev server
+    // can't grow memory unboundedly over a long session.
+    output: string;
+    exitCode: number | null;
+    startedAt: number;
+}
+
+const MAX_BACKGROUND_TASKS = 5;
+const MAX_BACKGROUND_OUTPUT_CHARS = 100_000;
+const BACKGROUND_OUTPUT_TAIL_CHARS = 20_000;
+const backgroundTasks = new Map<string, BackgroundTask>();
+
+export function startBackgroundCommand(
+    workspaceRoot: string,
+    command: string,
+    relativeCwd = ".",
+    name?: string
+): { taskId: string; name: string } {
+    const dangerReason = findDangerousCommandReason(command);
+    if (dangerReason) throw new Error(dangerReason);
+    const runningCount = [...backgroundTasks.values()].filter((t) => t.exitCode === null).length;
+    if (runningCount >= MAX_BACKGROUND_TASKS) {
+        throw new Error(`Already running ${MAX_BACKGROUND_TASKS} background commands — stop one first.`);
+    }
+
+    const cwd = resolveSafePath(workspaceRoot, relativeCwd);
+    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    const id = randomUUID().slice(0, 8);
+    const task: BackgroundTask = {
+        id,
+        name: name?.trim() || command.slice(0, 40),
+        command,
+        process: child,
+        output: "",
+        exitCode: null,
+        startedAt: Date.now(),
+    };
+    const append = (chunk: Buffer) => {
+        task.output += chunk.toString();
+        if (task.output.length > MAX_BACKGROUND_OUTPUT_CHARS) {
+            task.output = task.output.slice(-MAX_BACKGROUND_OUTPUT_CHARS);
+        }
+    };
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    child.on("error", (err) => {
+        task.output += `\n[failed to start: ${err.message}]`;
+        task.exitCode = -1;
+    });
+    child.on("exit", (code) => {
+        task.exitCode = code ?? -1;
+    });
+    backgroundTasks.set(id, task);
+    return { taskId: id, name: task.name };
+}
+
+export function getBackgroundOutput(taskId: string): string {
+    const task = backgroundTasks.get(taskId);
+    if (!task) throw new Error(`No background task with id "${taskId}".`);
+    const status =
+        task.exitCode === null
+            ? `running (${Math.round((Date.now() - task.startedAt) / 1000)}s)`
+            : `exited with code ${task.exitCode}`;
+    const tail =
+        task.output.length > BACKGROUND_OUTPUT_TAIL_CHARS
+            ? `[...earlier output trimmed]\n${task.output.slice(-BACKGROUND_OUTPUT_TAIL_CHARS)}`
+            : task.output;
+    return `Task ${task.id} (${task.name}): ${status}\n--- output ---\n${tail || "(no output yet)"}`;
+}
+
+export function stopBackgroundCommand(taskId: string): string {
+    const task = backgroundTasks.get(taskId);
+    if (!task) throw new Error(`No background task with id "${taskId}".`);
+    if (task.exitCode !== null) return `Task ${task.id} had already exited with code ${task.exitCode}.`;
+    task.process.kill();
+    return `Task ${task.id} (${task.name}) stopped.`;
+}
+
+export function listBackgroundCommands(): { id: string; name: string; command: string; status: string }[] {
+    return [...backgroundTasks.values()].map((t) => ({
+        id: t.id,
+        name: t.name,
+        command: t.command,
+        status: t.exitCode === null ? "running" : `exited (${t.exitCode})`,
+    }));
+}
+
+export function killAllBackgroundCommands(): void {
+    for (const task of backgroundTasks.values()) {
+        if (task.exitCode === null) task.process.kill();
+    }
+    backgroundTasks.clear();
+}
+
 function gitCommand(workspaceRoot: string, args: string): Promise<string> {
     return runCommand(workspaceRoot, `git ${args}`, ".");
 }
@@ -947,6 +1087,19 @@ export async function executeTool(workspaceRoot: string, name: string, args: Rec
             const language = args.language === "python" ? "python" : "javascript";
             return runCode(workspaceRoot, language, String(args.code ?? ""), args.cwd ? String(args.cwd) : ".");
         }
+        case "start_background_command":
+            return startBackgroundCommand(
+                workspaceRoot,
+                String(args.command ?? ""),
+                args.cwd ? String(args.cwd) : ".",
+                args.name ? String(args.name) : undefined
+            );
+        case "get_background_output":
+            return getBackgroundOutput(String(args.task_id ?? ""));
+        case "stop_background_command":
+            return stopBackgroundCommand(String(args.task_id ?? ""));
+        case "list_background_commands":
+            return listBackgroundCommands();
         case "git_status":
             return gitStatus(workspaceRoot);
         case "git_diff":
