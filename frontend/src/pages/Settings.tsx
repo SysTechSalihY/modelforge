@@ -28,6 +28,10 @@ import {
     Database,
     MemoryStick,
     UserRound,
+    Cpu,
+    Apple,
+    Gauge,
+    ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +67,7 @@ import type {
     ScheduledTask,
     AppActivity,
     LinkedAccount,
+    LocalRuntimeStatus,
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
 import { recommendGpuBackend, gpuBackendNote } from "@/lib/gpu";
@@ -95,6 +100,19 @@ const SETTINGS_SEARCH_ITEMS: { tab: SettingsTab; label: string; keywords: string
     { tab: "automation", label: "Automation", keywords: "scheduled task interval prompt" },
     { tab: "data", label: "Data, activity & diagnostics", keywords: "export import logs memory activity clear" },
 ];
+
+const MANAGED_MODEL_CATALOG = [
+    { backend: "mlx" as const, id: "mlx-community/Llama-3.2-3B-Instruct-4bit", label: "Llama 3.2 3B", note: "Fast · 4-bit · Apple Silicon" },
+    { backend: "mlx" as const, id: "mlx-community/Qwen2.5-7B-Instruct-4bit", label: "Qwen 2.5 7B", note: "Balanced · 4-bit · Apple Silicon" },
+    { backend: "vllm" as const, id: "Qwen/Qwen2.5-7B-Instruct", label: "Qwen 2.5 7B", note: "Efficient · CUDA / ROCm" },
+    { backend: "vllm" as const, id: "meta-llama/Llama-3.1-8B-Instruct", label: "Llama 3.1 8B", note: "General purpose · CUDA / ROCm" },
+] as const;
+
+const RUNTIME_META = {
+    rocm: { label: "ROCm", icon: Cpu, docs: "https://github.com/ggerganov/llama.cpp/blob/master/docs/build.md" },
+    mlx: { label: "MLX", icon: Apple, docs: "https://github.com/ml-explore/mlx-lm" },
+    vllm: { label: "vLLM", icon: Gauge, docs: "https://docs.vllm.ai/en/latest/getting_started/installation.html" },
+} as const;
 
 // Ollama pulls Hugging Face GGUF models via a "hf.co/user/repo[:quant]" model
 // name — accept a pasted full URL or the "huggingface.co/" host too, rather
@@ -169,9 +187,10 @@ export default function Settings() {
     const [activity, setActivity] = useState<AppActivity | null>(null);
     const [activityLoading, setActivityLoading] = useState(false);
     const [keybindings, setKeybindings] = useState<Record<KeybindingAction, string>>(DEFAULT_KEYBINDINGS);
-    const [mlxModelInput, setMlxModelInput] = useState("");
-    const [vllmModelInput, setVllmModelInput] = useState("");
-    const [rocmPathInput, setRocmPathInput] = useState("");
+    const [localModelInput, setLocalModelInput] = useState("");
+    const [localModelBackend, setLocalModelBackend] = useState<"mlx" | "vllm">("vllm");
+    const [runtimeStatuses, setRuntimeStatuses] = useState<LocalRuntimeStatus[]>([]);
+    const [runtimeRefreshing, setRuntimeRefreshing] = useState(false);
     const [recordingAction, setRecordingAction] = useState<KeybindingAction | null>(null);
     const [keybindingConflict, setKeybindingConflict] = useState<string | null>(null);
     const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -234,12 +253,12 @@ export default function Settings() {
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
-            setRocmPathInput(s.rocmServerPath ?? "");
             setKeybindings({ ...DEFAULT_KEYBINDINGS, ...s.keybindings } as Record<KeybindingAction, string>);
         });
         refreshInstalled();
         window.api.llamacpp.listModels().then(setLlamaCppModels);
         window.api.llamacpp.getAvailableGpuBackends().then(setLlamaCppGpuBackends);
+        refreshRuntimeStatuses();
     }, []);
 
     useEffect(() => {
@@ -670,39 +689,31 @@ export default function Settings() {
         }
     }
 
-    async function addMlxModel() {
-        const id = mlxModelInput.trim();
+    async function addManagedModel(backend: "mlx" | "vllm", rawId: string = localModelInput) {
+        const id = rawId.trim();
         if (!id || !settings) return;
-        const existing = settings.mlxModels ?? [];
+        const key = backend === "mlx" ? "mlxModels" : "vllmModels";
+        const existing = settings[key] ?? [];
         if (existing.includes(id)) return;
-        await saveSettings({ mlxModels: [...existing, id] });
-        setMlxModelInput("");
-        toast.success(t.mlxModelAdded);
+        await saveSettings({ [key]: [...existing, id] });
+        setLocalModelInput("");
+        toast.success(`${RUNTIME_META[backend].label} model added to your library.`);
     }
 
-    async function removeMlxModel(id: string) {
+    async function removeManagedModel(backend: "mlx" | "vllm", id: string) {
         if (!settings) return;
-        await saveSettings({ mlxModels: (settings.mlxModels ?? []).filter((m) => m !== id) });
+        const key = backend === "mlx" ? "mlxModels" : "vllmModels";
+        await saveSettings({ [key]: (settings[key] ?? []).filter((model) => model !== id) });
     }
 
-    async function addVllmModel() {
-        const id = vllmModelInput.trim();
-        if (!id || !settings) return;
-        const existing = settings.vllmModels ?? [];
-        if (existing.includes(id)) return;
-        await saveSettings({ vllmModels: [...existing, id] });
-        setVllmModelInput("");
-        toast.success("vLLM model added");
-    }
-
-    async function removeVllmModel(id: string) {
-        if (!settings) return;
-        await saveSettings({ vllmModels: (settings.vllmModels ?? []).filter((m) => m !== id) });
-    }
-
-    async function saveRocmPath() {
-        await saveSettings({ rocmServerPath: rocmPathInput.trim() || undefined });
-        toast.success(rocmPathInput.trim() ? t.rocmPathSaved : t.rocmPathCleared);
+    async function refreshRuntimeStatuses() {
+        if (!window.api) return;
+        setRuntimeRefreshing(true);
+        try {
+            setRuntimeStatuses(await window.api.localBackends.getStatuses());
+        } finally {
+            setRuntimeRefreshing(false);
+        }
     }
 
     async function connectMcpServer(server: McpServerConfig) {
@@ -1101,93 +1112,100 @@ export default function Settings() {
                         )}
 
                         {settings && (
-                            <SettingsSection title={t.otherBackendsSection} description={t.otherBackendsHint} className="mt-8">
-                                <SettingsRow
-                                    label="ROCm runtime override (optional)"
-                                    description="The app manages llama-server automatically from PATH. Set a custom executable only when auto-detection cannot find your ROCm build."
-                                    stacked
+                            <>
+                                <SettingsSection
+                                    title="Local inference runtimes"
+                                    description="ModelForge discovers and manages compatible GPU engines automatically. Choose models below; paths and server commands stay out of the normal workflow."
+                                    className="mt-8"
                                 >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Input
-                                            value={rocmPathInput}
-                                            onChange={(e) => setRocmPathInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && saveRocmPath()}
-                                            placeholder="/path/to/llama-server (ROCm build)"
-                                            className="h-8 w-96 max-w-full font-mono text-xs"
-                                        />
-                                        <Button size="sm" variant="outline" onClick={saveRocmPath}>
-                                            {t.save}
-                                        </Button>
-                                        {settings.rocmServerPath && <Badge variant="secondary">{t.enabled}</Badge>}
+                                    <div className="grid gap-3 p-4 md:grid-cols-3">
+                                        {(["rocm", "mlx", "vllm"] as const).map((backend) => {
+                                            const meta = RUNTIME_META[backend];
+                                            const Icon = meta.icon;
+                                            const status = runtimeStatuses.find((item) => item.backend === backend);
+                                            const stateLabel = status?.running
+                                                ? "Running"
+                                                : status?.installed
+                                                  ? "Ready"
+                                                  : status && !status.compatible
+                                                    ? "Unsupported"
+                                                    : status
+                                                      ? "Not installed"
+                                                      : "Checking";
+                                            return (
+                                                <div key={backend} className="rounded-2xl border border-border/70 bg-card/70 p-4 shadow-sm">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-5" /></span>
+                                                        <Badge variant={status?.running || status?.installed ? "default" : "secondary"}>{stateLabel}</Badge>
+                                                    </div>
+                                                    <h3 className="mt-3 font-semibold">{meta.label}</h3>
+                                                    <p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">{status?.detail ?? "Detecting the local runtime…"}</p>
+                                                    {status?.model && <p className="mt-2 truncate font-mono text-[11px] text-primary">{status.model.split(/[/\\]/).pop()}</p>}
+                                                    <a href={meta.docs} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                                                        Setup guide <ExternalLink className="size-3" />
+                                                    </a>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                </SettingsRow>
-                                <SettingsRow label={t.mlxModelsLabel} description={t.mlxModelsHint} stacked>
-                                    {(settings.mlxModels ?? []).length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            {settings.mlxModels!.map((id) => (
-                                                <div key={id} className="flex items-center justify-between gap-2">
-                                                    <span className="truncate font-mono text-xs">{id}</span>
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        onClick={() => removeMlxModel(id)}
-                                                        aria-label={`Remove ${id}`}
-                                                    >
+                                    <div className="flex justify-end border-t border-border/60 px-4 py-3">
+                                        <Button size="sm" variant="outline" onClick={refreshRuntimeStatuses} disabled={runtimeRefreshing}>
+                                            <RefreshCw className={cn("size-3.5", runtimeRefreshing && "animate-spin")} /> Refresh runtimes
+                                        </Button>
+                                    </div>
+                                </SettingsSection>
+
+                                <SettingsSection
+                                    title="Local model library"
+                                    description="Add a recommended model once, then select it directly from Chat. The runtime downloads model weights from Hugging Face on first launch."
+                                    className="mt-8"
+                                >
+                                    {((settings.mlxModels?.length ?? 0) + (settings.vllmModels?.length ?? 0)) > 0 ? (
+                                        <div className="grid gap-2 p-4 sm:grid-cols-2">
+                                            {([...(settings.mlxModels ?? []).map((id) => ({ backend: "mlx" as const, id })), ...(settings.vllmModels ?? []).map((id) => ({ backend: "vllm" as const, id }))]).map(({ backend, id }) => (
+                                                <div key={`${backend}:${id}`} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/70 bg-muted/25 p-3">
+                                                    <Badge variant="outline" className="shrink-0">{RUNTIME_META[backend].label}</Badge>
+                                                    <span className="min-w-0 flex-1 truncate font-mono text-xs">{id}</span>
+                                                    <Button size="icon" variant="ghost" onClick={() => removeManagedModel(backend, id)} aria-label={`Remove ${id}`}>
                                                         <Trash2 className="size-3.5 text-destructive" />
                                                     </Button>
                                                 </div>
                                             ))}
                                         </div>
+                                    ) : (
+                                        <p className="p-4 text-sm text-muted-foreground">Your managed model library is empty. Add a recommended model below.</p>
                                     )}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Input
-                                            value={mlxModelInput}
-                                            onChange={(e) => setMlxModelInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && addMlxModel()}
-                                            placeholder="mlx-community/Llama-3.2-3B-Instruct-4bit"
-                                            className="h-8 w-96 max-w-full font-mono text-xs"
-                                        />
-                                        <Button size="sm" variant="outline" onClick={addMlxModel} disabled={!mlxModelInput.trim()}>
-                                            <Plus className="size-3.5" /> {t.add}
-                                        </Button>
-                                    </div>
-                                </SettingsRow>
-                                <SettingsRow
-                                    label="vLLM models"
-                                    description="Hugging Face model IDs or local model directories served by the app-managed vLLM runtime."
-                                    stacked
-                                >
-                                    {(settings.vllmModels ?? []).length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            {settings.vllmModels!.map((id) => (
-                                                <div key={id} className="flex items-center justify-between gap-2">
-                                                    <span className="truncate font-mono text-xs">{id}</span>
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        onClick={() => removeVllmModel(id)}
-                                                        aria-label={`Remove ${id}`}
+                                    <div className="border-t border-border/60 p-4">
+                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommended for your runtimes</p>
+                                        <div className="grid gap-2 sm:grid-cols-2">
+                                            {MANAGED_MODEL_CATALOG.map((model) => {
+                                                const added = (settings[model.backend === "mlx" ? "mlxModels" : "vllmModels"] ?? []).includes(model.id);
+                                                return (
+                                                    <button
+                                                        key={`${model.backend}:${model.id}`}
+                                                        type="button"
+                                                        disabled={added}
+                                                        onClick={() => addManagedModel(model.backend, model.id)}
+                                                        className="flex items-center gap-3 rounded-xl border border-border/70 p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5 disabled:cursor-default disabled:opacity-60"
                                                     >
-                                                        <Trash2 className="size-3.5 text-destructive" />
-                                                    </Button>
-                                                </div>
-                                            ))}
+                                                        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">{RUNTIME_META[model.backend].label}</span>
+                                                        <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{model.label}</span><span className="block truncate text-xs text-muted-foreground">{model.note}</span></span>
+                                                        {added ? <Check className="size-4 text-primary" /> : <Plus className="size-4" />}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
-                                    )}
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Input
-                                            value={vllmModelInput}
-                                            onChange={(e) => setVllmModelInput(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && addVllmModel()}
-                                            placeholder="meta-llama/Llama-3.1-8B-Instruct"
-                                            className="h-8 w-96 max-w-full font-mono text-xs"
-                                        />
-                                        <Button size="sm" variant="outline" onClick={addVllmModel} disabled={!vllmModelInput.trim()}>
-                                            <Plus className="size-3.5" /> {t.add}
-                                        </Button>
+                                        <div className="mt-4 flex flex-col gap-2 rounded-xl bg-muted/35 p-3 sm:flex-row">
+                                            <Select value={localModelBackend} onValueChange={(value) => setLocalModelBackend(value as "mlx" | "vllm")}>
+                                                <SelectTrigger size="sm" className="w-full sm:w-28"><SelectValue /></SelectTrigger>
+                                                <SelectContent><SelectItem value="mlx">MLX</SelectItem><SelectItem value="vllm">vLLM</SelectItem></SelectContent>
+                                            </Select>
+                                            <Input value={localModelInput} onChange={(event) => setLocalModelInput(event.target.value)} onKeyDown={(event) => event.key === "Enter" && addManagedModel(localModelBackend)} placeholder="Paste a Hugging Face model ID" className="h-8 flex-1 text-xs" />
+                                            <Button size="sm" onClick={() => addManagedModel(localModelBackend)} disabled={!localModelInput.trim()}><Plus className="size-3.5" /> Add model</Button>
+                                        </div>
                                     </div>
-                                </SettingsRow>
-                            </SettingsSection>
+                                </SettingsSection>
+                            </>
                         )}
 
                         <SettingsSection title={t.appearance} className="mt-8">

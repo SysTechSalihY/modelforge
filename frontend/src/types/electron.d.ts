@@ -135,6 +135,15 @@ export interface AppActivity {
   memory: { rssMB: number; heapUsedMB: number };
 }
 
+export interface LocalRuntimeStatus {
+  backend: "rocm" | "mlx" | "vllm";
+  compatible: boolean;
+  installed: boolean;
+  running: boolean;
+  model?: string;
+  detail: string;
+}
+
 export interface RollbackResult {
   path: string;
   restoredContent: boolean;
@@ -373,6 +382,9 @@ export interface ElectronApi {
     getAvailableGpuBackends: () => Promise<string[]>;
     setGpuBackend: (backend: LlamaCppGpuBackend) => Promise<void>;
     pickModelsDir: () => Promise<string | null>;
+  };
+  localBackends: {
+    getStatuses: () => Promise<LocalRuntimeStatus[]>;
   };
   chat: {
     send: (

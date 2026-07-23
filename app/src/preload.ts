@@ -7,6 +7,7 @@ import type { RollbackResult, ProjectScripts } from "./agent-tools";
 import type { PromptPreset } from "./settings-store";
 import type { LocalGgufModel, GpuBackend } from "./llamacpp-manager";
 import type { ScheduledTask } from "./scheduled-tasks-store";
+import type { LocalRuntimeStatus } from "./local-server-manager";
 
 interface ToolExecuteResult {
     result?: unknown;
@@ -91,6 +92,10 @@ contextBridge.exposeInMainWorld("api", {
         getAvailableGpuBackends: (): Promise<string[]> => ipcRenderer.invoke("llamacpp:getAvailableGpuBackends"),
         setGpuBackend: (backend: GpuBackend): Promise<void> => ipcRenderer.invoke("llamacpp:setGpuBackend", backend),
         pickModelsDir: (): Promise<string | null> => ipcRenderer.invoke("llamacpp:pickModelsDir"),
+    },
+
+    localBackends: {
+        getStatuses: (): Promise<LocalRuntimeStatus[]> => ipcRenderer.invoke("localBackends:getStatuses"),
     },
 
     chat: {

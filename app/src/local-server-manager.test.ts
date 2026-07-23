@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildServerCommand, describeSpawnFailure } from "./local-server-manager";
+import { buildRuntimeProbe, buildServerCommand, describeSpawnFailure } from "./local-server-manager";
 
 describe("buildServerCommand", () => {
     it("builds an mlx_lm.server invocation with the default python", () => {
@@ -71,5 +71,25 @@ describe("describeSpawnFailure", () => {
 
     it("points vLLM failures at installation rather than endpoint configuration", () => {
         expect(describeSpawnFailure("vllm")).toMatch(/pip install vllm/);
+    });
+});
+
+describe("buildRuntimeProbe", () => {
+    it("recognizes MLX only on Apple Silicon", () => {
+        expect(buildRuntimeProbe("mlx", {}, "darwin", "arm64").compatible).toBe(true);
+        expect(buildRuntimeProbe("mlx", {}, "linux", "x64").compatible).toBe(false);
+    });
+
+    it("checks vLLM through WSL on Windows", () => {
+        const probe = buildRuntimeProbe("vllm", {}, "win32", "x64");
+        expect(probe.compatible).toBe(true);
+        expect(probe.command).toBe("wsl.exe");
+        expect(probe.args).toEqual(["--", "vllm", "--version"]);
+    });
+
+    it("uses the configured ROCm runtime when supplied", () => {
+        const probe = buildRuntimeProbe("rocm", { rocmServerPath: "/opt/rocm/llama-server" }, "win32", "x64");
+        expect(probe.compatible).toBe(true);
+        expect(probe.command).toBe("/opt/rocm/llama-server");
     });
 });

@@ -304,6 +304,14 @@ function registerIpcHandlers(): void {
         await llamacpp.deleteModel(getLlamaCppModelsDir(), requireString(name, "model name"));
     });
     ipcMain.handle("llamacpp:getAvailableGpuBackends", () => llamacpp.getAvailableGpuBackends());
+    ipcMain.handle("localBackends:getStatuses", () => {
+        const settings = settingsStore.getSettings();
+        return localServers.getRuntimeStatuses({
+            mlxPythonPath: settings.mlxPythonPath,
+            rocmServerPath: settings.rocmServerPath,
+            vllmCommand: settings.vllmCommand,
+        });
+    });
     ipcMain.handle("llamacpp:setGpuBackend", async (_event: IpcMainInvokeEvent, backend: llamacpp.GpuBackend) => {
         await llamacpp.setGpuBackend(backend);
         settingsStore.saveSettings({ llamaCppGpuBackend: backend });

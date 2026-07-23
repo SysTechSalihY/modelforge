@@ -24,6 +24,22 @@ export interface LocalBackendConfig {
     vllmCommand?: string;
 }
 
+export interface LocalRuntimeStatus {
+    backend: LocalBackendId;
+    compatible: boolean;
+    installed: boolean;
+    running: boolean;
+    model?: string;
+    detail: string;
+}
+
+export interface RuntimeProbe {
+    compatible: boolean;
+    command: string;
+    args: string[];
+    detail: string;
+}
+
 interface RunningServer {
     process: ChildProcess;
     model: string;
@@ -46,6 +62,92 @@ const IDLE_TIMEOUT_MS = Number.isFinite(configuredIdleMinutes)
 
 const servers = new Map<LocalBackendId, RunningServer>();
 const serverStarts = new Map<LocalBackendId, { model: string; promise: Promise<string> }>();
+
+export function buildRuntimeProbe(
+    backend: LocalBackendId,
+    config: LocalBackendConfig,
+    platform: NodeJS.Platform = process.platform,
+    arch: string = process.arch
+): RuntimeProbe {
+    if (backend === "mlx") {
+        const compatible = platform === "darwin" && arch === "arm64";
+        return {
+            compatible,
+            command: config.mlxPythonPath?.trim() || "python3",
+            args: ["-c", "import mlx_lm"],
+            detail: compatible ? "Apple Silicon accelerated runtime" : "Requires an Apple Silicon Mac",
+        };
+    }
+    if (backend === "vllm") {
+        const compatible = platform === "linux" || platform === "win32";
+        if (!config.vllmCommand?.trim() && platform === "win32") {
+            return {
+                compatible,
+                command: "wsl.exe",
+                args: ["--", "vllm", "--version"],
+                detail: "CUDA or ROCm runtime through WSL",
+            };
+        }
+        return {
+            compatible,
+            command: config.vllmCommand?.trim() || "vllm",
+            args: ["--version"],
+            detail: compatible ? "High-throughput CUDA or ROCm runtime" : "Requires Linux or Windows with WSL",
+        };
+    }
+    const compatible = platform === "linux" || !!config.rocmServerPath?.trim();
+    return {
+        compatible,
+        command: config.rocmServerPath?.trim() || "llama-server",
+        args: ["--version"],
+        detail: compatible ? "AMD GPU runtime for local GGUF models" : "Requires Linux and a ROCm-capable AMD GPU",
+    };
+}
+
+async function commandSucceeds(command: string, args: string[]): Promise<boolean> {
+    return new Promise((resolve) => {
+        let settled = false;
+        let timer: NodeJS.Timeout;
+        const finish = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        };
+        let child: ChildProcess;
+        try {
+            child = spawn(command, args, { stdio: "ignore" });
+        } catch {
+            resolve(false);
+            return;
+        }
+        timer = setTimeout(() => {
+            child.kill();
+            finish(false);
+        }, 5_000);
+        timer.unref();
+        child.once("error", () => finish(false));
+        child.once("exit", (code) => finish(code === 0));
+    });
+}
+
+export async function getRuntimeStatuses(config: LocalBackendConfig): Promise<LocalRuntimeStatus[]> {
+    return Promise.all(
+        (["rocm", "mlx", "vllm"] as const).map(async (backend) => {
+            const probe = buildRuntimeProbe(backend, config);
+            const running = servers.get(backend);
+            const installed = probe.compatible && (running ? !running.exited : await commandSucceeds(probe.command, probe.args));
+            return {
+                backend,
+                compatible: probe.compatible,
+                installed,
+                running: !!running && !running.exited,
+                model: running && !running.exited ? running.model : undefined,
+                detail: probe.detail,
+            };
+        })
+    );
+}
 
 function clearIdleTimer(server: RunningServer): void {
     if (!server.idleTimer) return;
