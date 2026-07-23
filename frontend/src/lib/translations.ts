@@ -26,6 +26,7 @@ export interface Dictionary {
     toolResult: string;
     toolFailed: string;
     transientErrorRetrying: string;
+    contextCompacted: string;
     alwaysAllowThisSession: string;
     agentStep: string;
     agentStepTooltip: string;
@@ -333,6 +334,7 @@ export const en: Dictionary = {
     toolResult: "result",
     toolFailed: "failed",
     transientErrorRetrying: "Temporary provider error — retrying once...",
+    contextCompacted: "Older messages summarized to stay within context — nothing is lost from the saved chat.",
     alwaysAllowThisSession: "Always allow this session",
     agentStep: "Agent step",
     agentStepTooltip: "How many automatic tool-result → model-continuation round trips have happened for this turn.",
@@ -650,6 +652,7 @@ export const tr: Dictionary = {
     toolResult: "sonucu",
     toolFailed: "başarısız oldu",
     transientErrorRetrying: "Geçici sağlayıcı hatası — bir kez yeniden deneniyor...",
+    contextCompacted: "Bağlamda kalmak için eski mesajlar özetlendi — kaydedilen sohbetten hiçbir şey kaybolmadı.",
     alwaysAllowThisSession: "Bu oturumda her zaman izin ver",
     agentStep: "Ajan adımı",
     agentStepTooltip: "Bu tur için kaç otomatik araç sonucu → model devamı gidiş-dönüşü gerçekleşti.",

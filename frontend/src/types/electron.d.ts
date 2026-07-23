@@ -275,6 +275,8 @@ export interface ChatSession {
   agentMode?: boolean;
   agentWorkspace?: string | null;
   planSteps?: { text: string; done: boolean }[];
+  contextSummary?: string;
+  contextSummaryThroughIndex?: number;
   tags?: string[];
   createdAt: string;
   updatedAt: string;
@@ -424,6 +426,8 @@ export interface ElectronApi {
           | "agentMode"
           | "agentWorkspace"
           | "planSteps"
+          | "contextSummary"
+          | "contextSummaryThroughIndex"
           | "tags"
         >
       >

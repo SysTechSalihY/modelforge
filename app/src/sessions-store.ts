@@ -19,6 +19,11 @@ export interface ChatSession {
     // The agent's last set_plan checklist for this conversation, persisted so
     // reopening a chat mid-task shows where the plan stood.
     planSteps?: { text: string; done: boolean }[];
+    // Running summary produced by context compaction, replacing everything
+    // in `messages` before contextSummaryThroughIndex when this session's
+    // history is sent to a provider.
+    contextSummary?: string;
+    contextSummaryThroughIndex?: number;
     tags?: string[];
     createdAt: string;
     updatedAt: string;
@@ -66,7 +71,7 @@ export function updateSession(
     partial: Partial<
         Pick<
             ChatSession,
-            "title" | "model" | "messages" | "params" | "projectId" | "systemPrompt" | "agentMode" | "agentWorkspace" | "planSteps" | "tags"
+            "title" | "model" | "messages" | "params" | "projectId" | "systemPrompt" | "agentMode" | "agentWorkspace" | "planSteps" | "contextSummary" | "contextSummaryThroughIndex" | "tags"
         >
     >
 ): ChatSession | null {

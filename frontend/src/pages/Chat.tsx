@@ -70,6 +70,13 @@ import { speakText, stopSpeaking } from "@/lib/tts";
 import { computeLineDiff } from "@/lib/diff";
 import { useToast } from "@/components/toast";
 import { isTransientError } from "@/lib/transient-errors";
+import {
+    COMPACTION_BUDGET_TOKENS,
+    COMPACTION_KEEP_RECENT,
+    buildSummarizationPrompt,
+    planCompaction,
+    shouldCompact,
+} from "@/lib/context-compaction";
 import type {
     ChatMessage,
     OllamaModel,
@@ -430,6 +437,8 @@ export default function Chat() {
     const [agentStepCount, setAgentStepCount] = useState(0);
     const [autoApprovedTools, setAutoApprovedTools] = useState<Set<string>>(new Set());
     const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
+    const [contextSummary, setContextSummary] = useState<string | null>(null);
+    const [contextSummaryThroughIndex, setContextSummaryThroughIndex] = useState(0);
     const [projectScripts, setProjectScripts] = useState<ProjectScripts>({});
     const [quickActionRunning, setQuickActionRunning] = useState(false);
     const [undoMessage, setUndoMessage] = useState<string | null>(null);
@@ -511,6 +520,8 @@ export default function Chat() {
             setPendingToolCalls([]);
             setAgentStepCount(0);
             setPlanSteps(session.planSteps ?? []);
+            setContextSummary(session.contextSummary ?? null);
+            setContextSummaryThroughIndex(session.contextSummaryThroughIndex ?? 0);
             setAutoApprovedTools(new Set());
             setWriteDiffPreviews({});
             setUndoMessage(null);
@@ -847,6 +858,63 @@ export default function Chat() {
         }
     }
 
+    // A plain, non-streaming-to-the-UI completion used only to produce a
+    // compaction summary — same provider/model/agentMode:false, but its
+    // tokens are accumulated locally instead of touching message state.
+    async function summarizeText(prompt: string): Promise<string | null> {
+        const parsed = parseModelRef(model);
+        if (!parsed) return null;
+        let text = "";
+        const { promise } = window.api.chat.send(
+            parsed.provider,
+            parsed.modelId,
+            [{ role: "user", content: prompt }],
+            {},
+            (chunk) => {
+                text += chunk.message?.content ?? "";
+            },
+            false
+        );
+        const result = await promise;
+        return result.error ? null : text.trim() || null;
+    }
+
+    // Folds everything but the most recent messages into a running summary
+    // once the unfolded portion gets too large to keep sending verbatim —
+    // otherwise a long conversation eventually fails outright (or gets
+    // silently truncated by the provider) once it outgrows the model's
+    // context window. Returns null when no compaction was needed, in which
+    // case the caller sends its already-built history unchanged.
+    async function maybeCompactHistory(baseMessages: ChatMessage[]): Promise<ChatMessage[] | null> {
+        // Editing/forking/regenerating can shorten the message list after a
+        // fold point was recorded — clamp so a stale index never causes the
+        // "kept" slice to come up empty and silently drop recent context.
+        const alreadyFolded = Math.min(contextSummaryThroughIndex, baseMessages.length);
+        if (!shouldCompact(baseMessages, alreadyFolded, COMPACTION_KEEP_RECENT, COMPACTION_BUDGET_TOKENS)) {
+            return null;
+        }
+        const { toFold, kept, foldEndIndex } = planCompaction(baseMessages, alreadyFolded, COMPACTION_KEEP_RECENT);
+        if (toFold.length === 0) return null;
+
+        const summary = await summarizeText(buildSummarizationPrompt(contextSummary, toFold));
+        // Summarization itself failed (network blip, provider error) — fall
+        // back to sending the full uncompacted history rather than losing
+        // context or blocking the user's message.
+        if (!summary) return null;
+
+        setContextSummary(summary);
+        setContextSummaryThroughIndex(foldEndIndex);
+        if (sessionId) {
+            window.api.sessions.update(sessionId, { contextSummary: summary, contextSummaryThroughIndex: foldEndIndex });
+        }
+        toast.info(t.contextCompacted);
+        return [
+            ...buildSystemMessages(),
+            { role: "system", content: `Summary of earlier conversation:\n${summary}` },
+            ...kept,
+        ];
+    }
+
     async function runCompletion(
         history: ChatMessage[],
         baseMessages: ChatMessage[],
@@ -854,6 +922,10 @@ export default function Chat() {
     ) {
         const parsed = parseModelRef(model);
         if (!parsed || !sessionId) return;
+
+        const compactedHistory = await maybeCompactHistory(baseMessages);
+        const requestHistory = compactedHistory ?? history;
+
         // Timing an in-flight network stream, not computing render output —
         // the react-hooks purity rule can't tell this closure only runs once
         // per user-initiated send, not during render.
@@ -910,7 +982,7 @@ export default function Chat() {
         const { requestId, promise } = window.api.chat.send(
             parsed.provider,
             parsed.modelId,
-            history,
+            requestHistory,
             effectiveOptions(),
             (chunk) => {
                 const piece = chunk.message?.content ?? "";
