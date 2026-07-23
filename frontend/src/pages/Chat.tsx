@@ -56,7 +56,7 @@ import { Markdown } from "@/components/markdown";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef, parseModelRef } from "@/lib/providers";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, formatCustomModelRef, parseModelRef } from "@/lib/providers";
 import { estimateCost, formatCost } from "@/lib/pricing";
 import { extractVariables, fillTemplate } from "@/lib/prompt-templates";
 import { PromptVariableDialog } from "@/components/prompt-variable-dialog";
@@ -1190,6 +1190,25 @@ export default function Chat() {
                             ))}
                             <SelectItem value={formatModelRef("anthropic", CUSTOM_SENTINEL)}>Custom model ID...</SelectItem>
                         </SelectGroup>
+                        <SelectGroup>
+                            <SelectLabel>Gemini</SelectLabel>
+                            {GEMINI_MODELS.map((m) => (
+                                <SelectItem key={m.id} value={formatModelRef("gemini", m.id)}>
+                                    {m.label}
+                                </SelectItem>
+                            ))}
+                            <SelectItem value={formatModelRef("gemini", CUSTOM_SENTINEL)}>Custom model ID...</SelectItem>
+                        </SelectGroup>
+                        {(settings?.customProviders ?? []).map((provider) => (
+                            <SelectGroup key={provider.id}>
+                                <SelectLabel>{provider.name}</SelectLabel>
+                                {provider.modelIds.map((modelId) => (
+                                    <SelectItem key={modelId} value={formatCustomModelRef(provider.id, modelId)}>
+                                        {modelId}
+                                    </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        ))}
                     </SelectContent>
                 </Select>
 

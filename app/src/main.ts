@@ -24,14 +24,21 @@ import type { McpServerConfig } from "./mcp-client";
 import type { AttachedFile } from "./file-reader";
 import * as openaiProvider from "./providers/openai";
 import * as anthropicProvider from "./providers/anthropic";
+import * as geminiProvider from "./providers/gemini";
+import { createOpenAiCompatibleChat } from "./providers/openai-compatible";
 import { setupMenu } from "./menu";
 import { setupAutoUpdater, checkForUpdatesManually } from "./updater";
 import type { ChatMessage, ChatChunk, ChatOptions, ProviderId, ToolDefinition } from "./providers/types";
 
-const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp">, string> = {
+const PROVIDER_SECRET_KEYS: Record<Exclude<ProviderId, "ollama" | "llamacpp" | "custom">, string> = {
     openai: "openai_api_key",
     anthropic: "anthropic_api_key",
+    gemini: "gemini_api_key",
 };
+
+function customProviderSecretKey(customProviderId: string): string {
+    return `custom_${customProviderId}_api_key`;
+}
 
 const activeChatRequests = new Map<string, AbortController>();
 let isBusy = false;
@@ -177,11 +184,32 @@ async function dispatchChat(
     } else if (provider === "llamacpp") {
         const modelPath = path.join(getLlamaCppModelsDir(), model);
         await llamacpp.chat(modelPath, messages, options, onToken, signal, tools);
+    } else if (provider === "custom") {
+        // model is "<customProviderId>::<actual model id>" — see
+        // frontend/src/lib/providers.ts's formatCustomModelRef.
+        const sep = model.indexOf("::");
+        if (sep === -1) throw new Error(`Malformed custom model reference: ${model}`);
+        const customProviderId = model.slice(0, sep);
+        const actualModel = model.slice(sep + 2);
+        const config = settingsStore.getSettings().customProviders?.find((p) => p.id === customProviderId);
+        if (!config) throw new Error(`Custom provider "${customProviderId}" is no longer configured.`);
+        const apiKey = secretsStore.getSecret(customProviderSecretKey(customProviderId));
+        if (!apiKey) throw new Error(`No API key set for ${config.name}. Add one in Settings.`);
+        await createOpenAiCompatibleChat(config.baseUrl, config.name)(
+            apiKey,
+            actualModel,
+            messages,
+            options,
+            onToken,
+            signal,
+            tools
+        );
     } else {
         const secretKey = PROVIDER_SECRET_KEYS[provider];
         const apiKey = secretsStore.getSecret(secretKey);
         if (!apiKey) throw new Error(`No API key set for ${provider}. Add one in Settings.`);
-        const providerFn = provider === "openai" ? openaiProvider.chat : anthropicProvider.chat;
+        const providerFn =
+            provider === "openai" ? openaiProvider.chat : provider === "anthropic" ? anthropicProvider.chat : geminiProvider.chat;
         await providerFn(apiKey, model, messages, options, onToken, signal, tools);
     }
 }

@@ -5,10 +5,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Markdown } from "@/components/markdown";
 import { useI18n } from "@/lib/i18n";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef, parseModelRef } from "@/lib/providers";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, formatCustomModelRef, parseModelRef } from "@/lib/providers";
 import { estimateCost, formatCost } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
-import type { OllamaModel, LocalGgufModel, UsageInfo, ChatChunk } from "@/types/electron";
+import type { OllamaModel, LocalGgufModel, UsageInfo, ChatChunk, AppSettings } from "@/types/electron";
 
 interface CandidateModel {
     ref: string;
@@ -27,6 +27,7 @@ export default function Compare() {
     const hasApi = typeof window !== "undefined" && !!window.api;
     const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
     const [llamaCppModels, setLlamaCppModels] = useState<LocalGgufModel[]>([]);
+    const [settings, setSettings] = useState<AppSettings | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [prompt, setPrompt] = useState("");
     const [results, setResults] = useState<Record<string, CompareResult>>({});
@@ -36,6 +37,7 @@ export default function Compare() {
         if (!hasApi) return;
         window.api.ollama.listModels().then(setOllamaModels);
         window.api.llamacpp.listModels().then(setLlamaCppModels);
+        window.api.settings.get().then(setSettings);
     }, [hasApi]);
 
     const candidates: CandidateModel[] = [
@@ -43,6 +45,10 @@ export default function Compare() {
         ...llamaCppModels.map((m) => ({ ref: formatModelRef("llamacpp", m.name), label: `${m.name} (llama.cpp)` })),
         ...OPENAI_MODELS.map((m) => ({ ref: formatModelRef("openai", m.id), label: m.label })),
         ...ANTHROPIC_MODELS.map((m) => ({ ref: formatModelRef("anthropic", m.id), label: m.label })),
+        ...GEMINI_MODELS.map((m) => ({ ref: formatModelRef("gemini", m.id), label: m.label })),
+        ...(settings?.customProviders ?? []).flatMap((p) =>
+            p.modelIds.map((modelId) => ({ ref: formatCustomModelRef(p.id, modelId), label: `${modelId} (${p.name})` }))
+        ),
     ];
 
     function toggleModel(ref: string) {

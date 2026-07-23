@@ -20,6 +20,15 @@ export interface PromptPreset {
     updatedAt?: string;
 }
 
+export interface CustomProviderConfig {
+    id: string;
+    name: string;
+    // Base URL up to and including the version segment, e.g.
+    // "https://api.groq.com/openai/v1" — "/chat/completions" is appended.
+    baseUrl: string;
+    modelIds: string[];
+}
+
 export interface AppSettings {
     defaultModel: string | null;
     ollamaHost: string;
@@ -57,6 +66,13 @@ export interface AppSettings {
     // directory) since the two backends use incompatible on-disk layouts.
     llamaCppModelsDir?: string;
     llamaCppGpuBackend?: "auto" | "vulkan" | "cuda" | "metal" | "cpu";
+    // User-added OpenAI-compatible endpoints (Groq, Mistral, DeepSeek, xAI,
+    // OpenRouter, or anything else that speaks the same API) — each one's
+    // API key is stored separately via secretsStore, keyed by its id.
+    customProviders?: CustomProviderConfig[];
+    // Set once the first-run provider setup wizard has been completed (or
+    // explicitly skipped), so it doesn't reappear on every launch.
+    onboardingComplete?: boolean;
 }
 
 const DEFAULTS: AppSettings = {

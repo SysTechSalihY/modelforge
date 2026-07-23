@@ -198,6 +198,12 @@ export interface Dictionary {
     minutes: string;
     enable: string;
     disable: string;
+    customProvidersSection: string;
+    customProvidersHint: string;
+    customProviderName: string;
+    customProviderBaseUrl: string;
+    customProviderModelIds: string;
+    addCustomProvider: string;
     resetToDefault: string;
     usingCustomPrompt: string;
     dataManagement: string;
@@ -434,6 +440,12 @@ export const en: Dictionary = {
     minutes: "min",
     enable: "Enable",
     disable: "Disable",
+    customProvidersSection: "Custom providers",
+    customProvidersHint: "Add any OpenAI-compatible API endpoint — Groq, Mistral, DeepSeek, xAI, OpenRouter, a self-hosted server, or anything else that speaks the same chat-completions format. Pick a quick-add preset below or enter your own.",
+    customProviderName: "Name (e.g. Groq)",
+    customProviderBaseUrl: "Base URL (e.g. https://api.groq.com/openai/v1)",
+    customProviderModelIds: "Model IDs, comma-separated",
+    addCustomProvider: "Add provider",
     resetToDefault: "Reset to default",
     usingCustomPrompt: "Custom prompt for this chat",
     dataManagement: "Data management",
@@ -678,6 +690,12 @@ export const tr: Dictionary = {
     minutes: "dk",
     enable: "Etkinleştir",
     disable: "Devre dışı bırak",
+    customProvidersSection: "Özel sağlayıcılar",
+    customProvidersHint: "Herhangi bir OpenAI uyumlu API uç noktası ekleyin — Groq, Mistral, DeepSeek, xAI, OpenRouter, kendi barındırdığınız bir sunucu veya aynı chat-completions formatını konuşan başka bir şey. Aşağıdan hızlı ekleme ön ayarlarından birini seçin veya kendinizinkini girin.",
+    customProviderName: "Ad (ör. Groq)",
+    customProviderBaseUrl: "Temel URL (ör. https://api.groq.com/openai/v1)",
+    customProviderModelIds: "Model ID'leri, virgülle ayrılmış",
+    addCustomProvider: "Sağlayıcı ekle",
     resetToDefault: "Varsayılana dön",
     usingCustomPrompt: "Bu sohbet için özel istem",
     dataManagement: "Veri yönetimi",

@@ -10,6 +10,8 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
     openai: "ChatGPT",
     anthropic: "Claude",
     llamacpp: "llama.cpp (local)",
+    gemini: "Gemini",
+    custom: "Custom",
 };
 
 // Curated as of this app's last update — model lineups change often, so the
@@ -31,16 +33,55 @@ export const ANTHROPIC_MODELS: CuratedModel[] = [
     { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
 
+export const GEMINI_MODELS: CuratedModel[] = [
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
+];
+
+// Base URL + a starting set of model IDs for one-click "add this provider"
+// buttons — all speak the OpenAI-compatible chat-completions API, so no
+// dedicated client code is needed per vendor, just its endpoint and models.
+export interface CustomProviderPreset {
+    name: string;
+    baseUrl: string;
+    modelIds: string[];
+}
+
+export const CUSTOM_PROVIDER_PRESETS: CustomProviderPreset[] = [
+    { name: "Groq", baseUrl: "https://api.groq.com/openai/v1", modelIds: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] },
+    { name: "Mistral", baseUrl: "https://api.mistral.ai/v1", modelIds: ["mistral-large-latest", "mistral-small-latest", "codestral-latest"] },
+    { name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", modelIds: ["deepseek-chat", "deepseek-reasoner"] },
+    { name: "xAI (Grok)", baseUrl: "https://api.x.ai/v1", modelIds: ["grok-4", "grok-4-fast", "grok-3"] },
+    { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", modelIds: ["openai/gpt-5", "anthropic/claude-sonnet-5"] },
+];
+
 // Sessions store a single "model" string; encode the provider into it since
-// Ollama model names already contain colons (e.g. "llama3.1:8b").
+// Ollama model names already contain colons (e.g. "llama3.1:8b"). Custom
+// providers encode a second identifier (which configured endpoint) ahead of
+// the actual model id — see formatCustomModelRef.
 export function formatModelRef(provider: ProviderId, modelId: string): string {
     return `${provider}:${modelId}`;
 }
+
+export function formatCustomModelRef(customProviderId: string, modelId: string): string {
+    return formatModelRef("custom", `${customProviderId}::${modelId}`);
+}
+
+// Splits a "custom" provider's modelId portion back into which configured
+// endpoint it targets and the actual model id sent to that endpoint.
+export function parseCustomModelId(modelId: string): { customProviderId: string; actualModel: string } | null {
+    const sep = modelId.indexOf("::");
+    if (sep === -1) return null;
+    return { customProviderId: modelId.slice(0, sep), actualModel: modelId.slice(sep + 2) };
+}
+
+const VALID_PROVIDERS: ProviderId[] = ["ollama", "openai", "anthropic", "llamacpp", "gemini", "custom"];
 
 export function parseModelRef(ref: string): { provider: ProviderId; modelId: string } | null {
     const sepIndex = ref.indexOf(":");
     if (sepIndex === -1) return null;
     const provider = ref.slice(0, sepIndex) as ProviderId;
-    if (provider !== "ollama" && provider !== "openai" && provider !== "anthropic" && provider !== "llamacpp") return null;
+    if (!VALID_PROVIDERS.includes(provider)) return null;
     return { provider, modelId: ref.slice(sepIndex + 1) };
 }

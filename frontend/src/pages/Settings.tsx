@@ -56,7 +56,7 @@ import type {
     ScheduledTask,
 } from "@/types/electron";
 import { EXTRA_MODELS } from "@/lib/model-catalog";
-import { OPENAI_MODELS, ANTHROPIC_MODELS, formatModelRef } from "@/lib/providers";
+import { OPENAI_MODELS, ANTHROPIC_MODELS, GEMINI_MODELS, formatModelRef, CUSTOM_PROVIDER_PRESETS } from "@/lib/providers";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
 import type { Locale } from "@/lib/translations";
@@ -120,6 +120,14 @@ export default function Settings() {
     const [anthropicKeySet, setAnthropicKeySet] = useState(false);
     const [figmaTokenInput, setFigmaTokenInput] = useState("");
     const [figmaTokenSet, setFigmaTokenSet] = useState(false);
+    const [geminiKeyInput, setGeminiKeyInput] = useState("");
+    const [geminiKeySet, setGeminiKeySet] = useState(false);
+    const [customKeySet, setCustomKeySet] = useState<Record<string, boolean>>({});
+    const [customKeyInputs, setCustomKeyInputs] = useState<Record<string, string>>({});
+    const [showAddCustomProvider, setShowAddCustomProvider] = useState(false);
+    const [customDraftName, setCustomDraftName] = useState("");
+    const [customDraftBaseUrl, setCustomDraftBaseUrl] = useState("");
+    const [customDraftModelIds, setCustomDraftModelIds] = useState("");
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
     const [userDataPath, setUserDataPath] = useState<string | null>(null);
@@ -181,10 +189,16 @@ export default function Settings() {
         window.api.settings.get().then((s) => {
             setSettings(s);
             setOllamaHostInput(s.ollamaHost);
+            for (const provider of s.customProviders ?? []) {
+                window.api.secrets.has(`custom_${provider.id}_api_key`).then((has) =>
+                    setCustomKeySet((prev) => ({ ...prev, [provider.id]: has }))
+                );
+            }
         });
         window.api.secrets.has("openai_api_key").then(setOpenaiKeySet);
         window.api.secrets.has("anthropic_api_key").then(setAnthropicKeySet);
         window.api.secrets.has("figma_token").then(setFigmaTokenSet);
+        window.api.secrets.has("gemini_api_key").then(setGeminiKeySet);
         window.api.app.getVersion().then(setAppVersion);
         window.api.data.getUserDataPath().then(setUserDataPath);
         refreshInstalled();
@@ -351,6 +365,54 @@ export default function Settings() {
         await window.api.secrets.set("figma_token", figmaTokenInput.trim());
         setFigmaTokenSet(!!figmaTokenInput.trim());
         setFigmaTokenInput("");
+    }
+
+    async function saveGeminiKey() {
+        await window.api.secrets.set("gemini_api_key", geminiKeyInput.trim());
+        setGeminiKeySet(!!geminiKeyInput.trim());
+        setGeminiKeyInput("");
+    }
+
+    function prefillCustomProviderPreset(preset: { name: string; baseUrl: string; modelIds: string[] }) {
+        setCustomDraftName(preset.name);
+        setCustomDraftBaseUrl(preset.baseUrl);
+        setCustomDraftModelIds(preset.modelIds.join(", "));
+        setShowAddCustomProvider(true);
+    }
+
+    async function addCustomProvider() {
+        if (!settings) return;
+        const name = customDraftName.trim();
+        const baseUrl = customDraftBaseUrl.trim();
+        const modelIds = customDraftModelIds
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        if (!name || !baseUrl || modelIds.length === 0) return;
+        const provider = { id: crypto.randomUUID(), name, baseUrl, modelIds };
+        const updated = await window.api.settings.save({
+            customProviders: [...(settings.customProviders ?? []), provider],
+        });
+        setSettings(updated);
+        setCustomDraftName("");
+        setCustomDraftBaseUrl("");
+        setCustomDraftModelIds("");
+        setShowAddCustomProvider(false);
+    }
+
+    async function removeCustomProvider(id: string) {
+        if (!settings) return;
+        const updated = await window.api.settings.save({
+            customProviders: (settings.customProviders ?? []).filter((p) => p.id !== id),
+        });
+        setSettings(updated);
+    }
+
+    async function saveCustomProviderKey(id: string) {
+        const value = (customKeyInputs[id] ?? "").trim();
+        await window.api.secrets.set(`custom_${id}_api_key`, value);
+        setCustomKeySet((prev) => ({ ...prev, [id]: !!value }));
+        setCustomKeyInputs((prev) => ({ ...prev, [id]: "" }));
     }
 
     async function saveOllamaHost() {
@@ -1143,6 +1205,127 @@ export default function Settings() {
                                     </Button>
                                 </div>
                             </SettingsRow>
+                            <SettingsRow label="Gemini (Google)" stacked>
+                                <div className="flex items-center gap-2">
+                                    {geminiKeySet && (
+                                        <Badge variant="secondary">
+                                            <Check className="mr-1 size-3" /> Configured
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="flex gap-1.5">
+                                    <Input
+                                        type="password"
+                                        value={geminiKeyInput}
+                                        onChange={(e) => setGeminiKeyInput(e.target.value)}
+                                        placeholder={geminiKeySet ? "Replace API key..." : "AIza..."}
+                                        aria-label="Gemini (Google) API key"
+                                        className="h-8 text-xs"
+                                    />
+                                    <Button size="sm" variant="outline" onClick={saveGeminiKey} disabled={!geminiKeyInput.trim()}>
+                                        {t.save}
+                                    </Button>
+                                </div>
+                            </SettingsRow>
+                        </SettingsSection>
+
+                        <SettingsSection title={t.customProvidersSection} description={t.customProvidersHint} className="mt-8">
+                            {(settings?.customProviders ?? []).map((provider) => (
+                                <SettingsRow key={provider.id} label={provider.name} description={provider.baseUrl} stacked>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {customKeySet[provider.id] && (
+                                            <Badge variant="secondary">
+                                                <Check className="mr-1 size-3" /> Configured
+                                            </Badge>
+                                        )}
+                                        <Input
+                                            type="password"
+                                            value={customKeyInputs[provider.id] ?? ""}
+                                            onChange={(e) =>
+                                                setCustomKeyInputs((prev) => ({ ...prev, [provider.id]: e.target.value }))
+                                            }
+                                            placeholder={customKeySet[provider.id] ? "Replace API key..." : "API key..."}
+                                            aria-label={`${provider.name} API key`}
+                                            className="h-8 w-40 text-xs"
+                                        />
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => saveCustomProviderKey(provider.id)}
+                                            disabled={!(customKeyInputs[provider.id] ?? "").trim()}
+                                        >
+                                            {t.save}
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => removeCustomProvider(provider.id)}
+                                            aria-label={`Remove ${provider.name}`}
+                                        >
+                                            <Trash2 className="size-3.5 text-destructive" />
+                                        </Button>
+                                    </div>
+                                </SettingsRow>
+                            ))}
+                            <SettingsRow stacked>
+                                {showAddCustomProvider ? (
+                                    <div className="flex flex-col gap-2">
+                                        <Input
+                                            value={customDraftName}
+                                            onChange={(e) => setCustomDraftName(e.target.value)}
+                                            placeholder={t.customProviderName}
+                                            className="h-8 text-xs"
+                                        />
+                                        <Input
+                                            value={customDraftBaseUrl}
+                                            onChange={(e) => setCustomDraftBaseUrl(e.target.value)}
+                                            placeholder={t.customProviderBaseUrl}
+                                            className="h-8 text-xs"
+                                        />
+                                        <Input
+                                            value={customDraftModelIds}
+                                            onChange={(e) => setCustomDraftModelIds(e.target.value)}
+                                            placeholder={t.customProviderModelIds}
+                                            className="h-8 text-xs"
+                                        />
+                                        <div className="flex gap-1.5">
+                                            <Button
+                                                size="sm"
+                                                onClick={addCustomProvider}
+                                                disabled={!customDraftName.trim() || !customDraftBaseUrl.trim() || !customDraftModelIds.trim()}
+                                                className="gap-1.5"
+                                            >
+                                                <Plus className="size-3.5" /> {t.addCustomProvider}
+                                            </Button>
+                                            <Button size="sm" variant="outline" onClick={() => setShowAddCustomProvider(false)}>
+                                                {t.cancel}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setShowAddCustomProvider(true)}
+                                            className="w-fit gap-1.5"
+                                        >
+                                            <Plus className="size-3.5" /> {t.addCustomProvider}
+                                        </Button>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {CUSTOM_PROVIDER_PRESETS.map((preset) => (
+                                                <button
+                                                    key={preset.name}
+                                                    onClick={() => prefillCustomProviderPreset(preset)}
+                                                    className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted/70"
+                                                >
+                                                    + {preset.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </SettingsRow>
                         </SettingsSection>
 
                         <SettingsSection title={t.integrations} description={t.figmaTokenHint} className="mt-8">
@@ -1427,6 +1610,14 @@ export default function Settings() {
                                                         </SelectItem>
                                                     ))}
                                                 </SelectGroup>
+                                                <SelectGroup>
+                                                    <SelectLabel>Gemini</SelectLabel>
+                                                    {GEMINI_MODELS.map((m) => (
+                                                        <SelectItem key={m.id} value={formatModelRef("gemini", m.id)}>
+                                                            {m.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectGroup>
                                             </SelectContent>
                                         </Select>
                                         <div className="flex items-center gap-2">
@@ -1502,6 +1693,14 @@ export default function Settings() {
                                                     <SelectLabel>Claude</SelectLabel>
                                                     {ANTHROPIC_MODELS.map((m) => (
                                                         <SelectItem key={m.id} value={formatModelRef("anthropic", m.id)}>
+                                                            {m.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectGroup>
+                                                <SelectGroup>
+                                                    <SelectLabel>Gemini</SelectLabel>
+                                                    {GEMINI_MODELS.map((m) => (
+                                                        <SelectItem key={m.id} value={formatModelRef("gemini", m.id)}>
                                                             {m.label}
                                                         </SelectItem>
                                                     ))}

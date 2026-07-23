@@ -188,6 +188,8 @@ export interface AppSettings {
   modelsDir?: string;
   llamaCppModelsDir?: string;
   llamaCppGpuBackend?: "auto" | "vulkan" | "cuda" | "metal" | "cpu";
+  customProviders?: CustomProviderConfig[];
+  onboardingComplete?: boolean;
 }
 
 export interface ChatOptions {
@@ -285,7 +287,14 @@ export interface ImageAttachment {
 
 export type MediaAttachment = TextAttachment | ImageAttachment;
 
-export type ProviderId = "ollama" | "openai" | "anthropic" | "llamacpp";
+export type ProviderId = "ollama" | "openai" | "anthropic" | "llamacpp" | "gemini" | "custom";
+
+export interface CustomProviderConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  modelIds: string[];
+}
 
 export interface LocalGgufModel {
   name: string;

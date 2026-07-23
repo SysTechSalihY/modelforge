@@ -17,6 +17,9 @@ export const PRICING: Record<string, ModelPricing> = {
     "claude-opus-4-8": { inputPer1M: 15, outputPer1M: 75 },
     "claude-sonnet-5": { inputPer1M: 3, outputPer1M: 15 },
     "claude-haiku-4-5-20251001": { inputPer1M: 0.8, outputPer1M: 4 },
+    "gemini-2.5-pro": { inputPer1M: 1.25, outputPer1M: 10 },
+    "gemini-2.5-flash": { inputPer1M: 0.3, outputPer1M: 2.5 },
+    "gemini-2.5-flash-lite": { inputPer1M: 0.1, outputPer1M: 0.4 },
 };
 
 export function estimateCost(
