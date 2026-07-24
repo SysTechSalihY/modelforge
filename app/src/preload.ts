@@ -5,6 +5,7 @@ import type { ChatMessage, ChatChunk, ChatOptions, ProviderId } from "./provider
 import type { McpServerConfig, McpServerStatus } from "./mcp-client";
 import type { RollbackResult, ProjectScripts } from "./agent-tools";
 import type { SandboxCapabilities } from "./command-sandbox";
+import type { TerminalInfo } from "./terminal-manager";
 import type { PromptPreset } from "./settings-store";
 import type { LocalGgufModel, GpuBackend } from "./llamacpp-manager";
 import type { ScheduledTask } from "./scheduled-tasks-store";
@@ -14,6 +15,12 @@ interface ToolExecuteResult {
     result?: unknown;
     error?: string;
 }
+
+// Tracked so terminal.close() can remove these deterministically instead of
+// relying solely on the main-process exit event to arrive (it normally
+// does, but explicit cleanup on close() is cheap insurance against a leaked
+// listener if it doesn't).
+const terminalListeners = new Map<string, { data: (...args: unknown[]) => void; exit: (...args: unknown[]) => void }>();
 
 interface ScreenSourceInfo {
     id: string;
@@ -231,9 +238,48 @@ contextBridge.exposeInMainWorld("api", {
             ipcRenderer.invoke("agent:rollbackLastWrite", workspaceRoot),
         detectScripts: (workspaceRoot: string): Promise<ProjectScripts> =>
             ipcRenderer.invoke("agent:detectScripts", workspaceRoot),
-        closeWorkspace: (workspaceRoot: string): Promise<{ killedBackgroundTasks: number }> =>
+        closeWorkspace: (workspaceRoot: string): Promise<{ killedBackgroundTasks: number; killedTerminals: number }> =>
             ipcRenderer.invoke("agent:closeWorkspace", workspaceRoot),
         getSandboxCapabilities: (): Promise<SandboxCapabilities> => ipcRenderer.invoke("agent:getSandboxCapabilities"),
+    },
+
+    // Human-facing interactive terminals (a live pseudo-terminal panel) —
+    // separate from the model's create_terminal/write_to_terminal/etc. tool
+    // calls, which poll terminal state through agent.executeTool instead of
+    // needing a push-streaming channel. Both sides share the same
+    // terminal-manager.ts session pool, just reached through different paths:
+    // this one never goes through tool approval, since the human is driving
+    // it directly.
+    terminal: {
+        create: (
+            workspaceRoot: string,
+            opts: { cwd?: string; name?: string },
+            onData: (chunk: string) => void,
+            onExit: (exitCode: number) => void
+        ): Promise<{ id: string; name: string }> =>
+            ipcRenderer.invoke("terminal:create", { workspaceRoot, opts }).then((created: { id: string; name: string }) => {
+                const dataListener = (_event: unknown, chunk: string) => onData(chunk);
+                const exitListener = (_event: unknown, exitCode: number) => onExit(exitCode);
+                ipcRenderer.on(`terminal:data:${created.id}`, dataListener);
+                ipcRenderer.on(`terminal:exit:${created.id}`, exitListener);
+                terminalListeners.set(created.id, {
+                    data: dataListener as (...args: unknown[]) => void,
+                    exit: exitListener as (...args: unknown[]) => void,
+                });
+                return created;
+            }),
+        write: (id: string, data: string): Promise<void> => ipcRenderer.invoke("terminal:write", { id, data }),
+        resize: (id: string, cols: number, rows: number): Promise<void> => ipcRenderer.invoke("terminal:resize", { id, cols, rows }),
+        close: (id: string): Promise<void> => {
+            const listeners = terminalListeners.get(id);
+            if (listeners) {
+                ipcRenderer.removeListener(`terminal:data:${id}`, listeners.data);
+                ipcRenderer.removeListener(`terminal:exit:${id}`, listeners.exit);
+                terminalListeners.delete(id);
+            }
+            return ipcRenderer.invoke("terminal:close", id);
+        },
+        list: (workspaceRoot?: string): Promise<TerminalInfo[]> => ipcRenderer.invoke("terminal:list", workspaceRoot),
     },
 
     mcp: {

@@ -24,11 +24,34 @@ function commandExists(cmd: string): boolean {
     }
 }
 
-// `hasCommand` is injectable so tests can simulate "bwrap is/isn't on PATH"
+// bwrap being on PATH isn't sufficient on its own — modern Ubuntu (23.10+)
+// restricts unprivileged user-namespace creation by default (AppArmor
+// policy), which makes bwrap fail at runtime with a permission error even
+// when it's installed. A plain `which bwrap` check wouldn't catch that and
+// would report false confidence, so this actually runs a trivial sandboxed
+// no-op and checks it really works.
+function canUseBubblewrap(): boolean {
+    if (!commandExists("bwrap")) return false;
+    try {
+        execFileSync("bwrap", ["--unshare-all", "--dev", "/dev", "--proc", "/proc", "true"], {
+            stdio: "ignore",
+            timeout: 5000,
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function defaultAvailabilityCheck(cmd: string): boolean {
+    return cmd === "bwrap" ? canUseBubblewrap() : commandExists(cmd);
+}
+
+// `hasCommand` is injectable so tests can simulate "bwrap is/isn't usable"
 // without actually shelling out.
 export function detectSandboxCapabilities(
     platform: NodeJS.Platform = process.platform,
-    hasCommand: (cmd: string) => boolean = commandExists
+    hasCommand: (cmd: string) => boolean = defaultAvailabilityCheck
 ): SandboxCapabilities {
     if (platform === "linux") {
         if (hasCommand("bwrap")) return { filesystemConfinement: true, networkDenial: true, mechanism: "bubblewrap" };
@@ -65,7 +88,7 @@ export function wrapCommand(
     command: string,
     opts: WrapCommandOptions,
     platform: NodeJS.Platform = process.platform,
-    hasCommand: (cmd: string) => boolean = commandExists
+    hasCommand: (cmd: string) => boolean = defaultAvailabilityCheck
 ): WrappedCommand | null {
     const caps = detectSandboxCapabilities(platform, hasCommand);
     const root = path.resolve(opts.workspaceRoot);
@@ -144,7 +167,7 @@ export function applySandbox(
     command: string,
     opts: WrapCommandOptions,
     platform: NodeJS.Platform = process.platform,
-    hasCommand: (cmd: string) => boolean = commandExists
+    hasCommand: (cmd: string) => boolean = defaultAvailabilityCheck
 ): string {
     const wrapped = wrapCommand(command, opts, platform, hasCommand);
     if (!wrapped) return command;

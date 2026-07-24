@@ -11,6 +11,8 @@ import { killProcessTree } from "./process-tree";
 import { applySandbox } from "./command-sandbox";
 import { monitorProcess } from "./resource-monitor";
 import * as settingsStore from "./settings-store";
+import { resolveSafePath } from "./workspace-path";
+import * as terminalManager from "./terminal-manager";
 
 const execAsync = promisify(exec);
 
@@ -201,6 +203,54 @@ export const AGENT_TOOLS: ToolDefinition[] = [
         name: "list_background_commands",
         description: "List all background commands from this session with their status.",
         parameters: { type: "object", properties: {}, required: [] },
+    },
+    {
+        name: "create_terminal",
+        description:
+            "Open a real interactive shell (a pseudo-terminal) in the workspace and return its id. Unlike run_command/start_background_command, this can be driven interactively over multiple turns — write_to_terminal to send input (including to a program already waiting for it, e.g. a REPL or a confirmation prompt), read_terminal_output to see what happened. Use this instead of start_background_command when you need to send input after the process has already started, not just read its output.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "Short human-readable label (e.g. \"debug session\")." },
+                cwd: { type: "string", description: 'Working directory, relative to the workspace root. Defaults to "."' },
+            },
+            required: [],
+        },
+    },
+    {
+        name: "write_to_terminal",
+        description: "Send input to a terminal opened with create_terminal, as if typed at the keyboard. Include \\n (or \\r) to press Enter and actually run a typed command — without it, the text is typed but not submitted.",
+        parameters: {
+            type: "object",
+            properties: {
+                terminal_id: { type: "string", description: "The id returned by create_terminal." },
+                input: { type: "string", description: "The text to send." },
+            },
+            required: ["terminal_id", "input"],
+        },
+    },
+    {
+        name: "read_terminal_output",
+        description: "Read the recent output of a terminal opened with create_terminal.",
+        parameters: {
+            type: "object",
+            properties: {
+                terminal_id: { type: "string", description: "The id returned by create_terminal." },
+                tail_chars: { type: "number", description: "How many characters of recent output to return, from the end. Defaults to 4000." },
+            },
+            required: ["terminal_id"],
+        },
+    },
+    {
+        name: "close_terminal",
+        description: "Close a terminal opened with create_terminal, ending its shell process.",
+        parameters: {
+            type: "object",
+            properties: {
+                terminal_id: { type: "string", description: "The id returned by create_terminal." },
+            },
+            required: ["terminal_id"],
+        },
     },
     {
         name: "git_status",
@@ -414,38 +464,6 @@ const MAX_LIST_ENTRIES = 500;
 const MAX_COMMAND_OUTPUT_CHARS = 50_000;
 const COMMAND_TIMEOUT_MS = 60_000;
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", "out", "release", "__pycache__"]);
-
-// Every tool call is confined to the chosen workspace directory — this
-// resolves the (possibly relative, possibly attacker-crafted via a prompt
-// injection in file content the model read) path and throws if it would
-// escape that directory via ../ or an absolute path elsewhere on disk.
-function resolveSafePath(workspaceRoot: string, relativePath: string): string {
-    const root = path.resolve(workspaceRoot);
-    const resolved = path.resolve(root, relativePath || ".");
-    const isWithin = (parent: string, child: string): boolean => {
-        const relative = path.relative(parent, child);
-        return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
-    };
-    if (!isWithin(root, resolved)) {
-        throw new Error(`Path "${relativePath}" is outside the workspace directory.`);
-    }
-
-    // Lexical checks alone are bypassable through a symlink inside the
-    // workspace that points elsewhere. Resolve the target, or its nearest
-    // existing parent for new files, and verify the real path too.
-    const realRoot = fs.realpathSync(root);
-    let existing = resolved;
-    while (!fs.existsSync(existing)) {
-        const parent = path.dirname(existing);
-        if (parent === existing) break;
-        existing = parent;
-    }
-    const realExisting = fs.realpathSync(existing);
-    if (!isWithin(realRoot, realExisting)) {
-        throw new Error(`Path "${relativePath}" resolves outside the workspace directory through a symbolic link.`);
-    }
-    return resolved;
-}
 
 export function readFile(workspaceRoot: string, relativePath: string, startLine?: number, endLine?: number): string {
     const target = resolveSafePath(workspaceRoot, relativePath);
@@ -1467,6 +1485,26 @@ export async function executeTool(workspaceRoot: string, name: string, args: Rec
             return stopBackgroundCommand(String(args.task_id ?? ""));
         case "list_background_commands":
             return listBackgroundCommands();
+        case "create_terminal":
+            // No-op streaming callbacks: the model drives this by polling
+            // read_terminal_output rather than receiving push events — live
+            // streaming is reserved for the human-facing terminal panel,
+            // which goes through the dedicated terminal:create IPC channel
+            // instead of this tool-call path.
+            return terminalManager.createTerminal(
+                workspaceRoot,
+                { name: args.name ? String(args.name) : undefined, cwd: args.cwd ? String(args.cwd) : undefined },
+                () => {},
+                () => {}
+            );
+        case "write_to_terminal":
+            terminalManager.writeToTerminal(String(args.terminal_id ?? ""), String(args.input ?? ""));
+            return { ok: true };
+        case "read_terminal_output":
+            return terminalManager.readTerminalOutput(String(args.terminal_id ?? ""), typeof args.tail_chars === "number" ? args.tail_chars : undefined);
+        case "close_terminal":
+            terminalManager.closeTerminal(String(args.terminal_id ?? ""));
+            return { ok: true };
         case "git_status":
             return gitStatus(workspaceRoot);
         case "git_diff":

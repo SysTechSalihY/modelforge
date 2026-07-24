@@ -161,6 +161,13 @@ export interface SandboxCapabilities {
   mechanism: "bubblewrap" | "sandbox-exec" | "none";
 }
 
+export interface TerminalInfo {
+  id: string;
+  name: string;
+  workspaceRoot: string;
+  alive: boolean;
+}
+
 export interface ScreenSourceInfo {
   id: string;
   name: string;
@@ -520,8 +527,20 @@ export interface ElectronApi {
     ) => Promise<{ result?: unknown; error?: string }>;
     rollbackLastWrite: (workspaceRoot: string) => Promise<RollbackResult | null>;
     detectScripts: (workspaceRoot: string) => Promise<ProjectScripts>;
-    closeWorkspace: (workspaceRoot: string) => Promise<{ killedBackgroundTasks: number }>;
+    closeWorkspace: (workspaceRoot: string) => Promise<{ killedBackgroundTasks: number; killedTerminals: number }>;
     getSandboxCapabilities: () => Promise<SandboxCapabilities>;
+  };
+  terminal: {
+    create: (
+      workspaceRoot: string,
+      opts: { cwd?: string; name?: string },
+      onData: (chunk: string) => void,
+      onExit: (exitCode: number) => void
+    ) => Promise<{ id: string; name: string }>;
+    write: (id: string, data: string) => Promise<void>;
+    resize: (id: string, cols: number, rows: number) => Promise<void>;
+    close: (id: string) => Promise<void>;
+    list: (workspaceRoot?: string) => Promise<TerminalInfo[]>;
   };
   mcp: {
     connect: (

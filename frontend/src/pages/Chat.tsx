@@ -23,6 +23,7 @@ import {
     Volume2,
     Mic,
     Undo2,
+    TerminalSquare,
     FlaskConical,
     Wand2,
     Wrench,
@@ -58,6 +59,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Markdown } from "@/components/markdown";
+import { TerminalPanel } from "@/components/terminal-panel";
 import { cn } from "@/lib/utils";
 import { useSessions } from "@/lib/sessions-context";
 import { useI18n } from "@/lib/i18n";
@@ -141,6 +143,7 @@ const READ_ONLY_TOOLS = new Set([
     "list_background_commands",
     "capture_page_screenshot",
     "find_symbol_references",
+    "read_terminal_output",
 ]);
 
 // Vision models can already reason over any attached image — these just save
@@ -447,6 +450,7 @@ export default function Chat() {
     const [sessionSystemPrompt, setSessionSystemPrompt] = useState<string | null>(null);
     const [agentMode, setAgentMode] = useState(false);
     const [agentWorkspace, setAgentWorkspace] = useState<string | null>(null);
+    const [showTerminalPanel, setShowTerminalPanel] = useState(false);
     const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([]);
     const [pendingVariablePreset, setPendingVariablePreset] = useState<PromptPreset | null>(null);
     const [agentStepCount, setAgentStepCount] = useState(0);
@@ -1598,6 +1602,19 @@ export default function Chat() {
                         {t.undoLastEdit}
                     </Button>
                 )}
+                {agentMode && agentWorkspace && (
+                    <Button
+                        size="sm"
+                        variant={showTerminalPanel ? "default" : "ghost"}
+                        onClick={() => setShowTerminalPanel((v) => !v)}
+                        className="gap-1.5 text-xs text-muted-foreground"
+                        aria-pressed={showTerminalPanel}
+                        title={t.terminalPanelToggle}
+                    >
+                        <TerminalSquare className="size-3.5" />
+                        {t.terminalPanelToggle}
+                    </Button>
+                )}
                 {agentMode && agentWorkspace && projectScripts.test && (
                     <Button
                         size="sm"
@@ -2148,6 +2165,10 @@ export default function Chat() {
                 </button>
             )}
             </div>
+
+            {showTerminalPanel && agentMode && agentWorkspace && (
+                <TerminalPanel key={agentWorkspace} workspaceRoot={agentWorkspace} onClose={() => setShowTerminalPanel(false)} />
+            )}
 
             <div className="surface-glass border-t border-border/70 p-3 shadow-[0_-12px_36px_rgb(0_0_0/0.04)] sm:p-4">
                 <div className="mx-auto max-w-3xl 2xl:max-w-4xl">

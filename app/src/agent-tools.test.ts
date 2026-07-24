@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
+import { closeAll as closeAllTerminals } from "./terminal-manager";
 import {
     readFile,
     writeFile,
@@ -390,6 +391,48 @@ describe("agent-tools", () => {
 
         it("throws for an unknown tool name", async () => {
             await expect(executeTool(workspace, "delete_everything", {})).rejects.toThrow(/Unknown tool/);
+        });
+    });
+
+    describe("terminal tools", () => {
+        afterEach(() => {
+            closeAllTerminals();
+        });
+
+        function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 5000): Promise<void> {
+            const start = Date.now();
+            return new Promise((resolve, reject) => {
+                const check = async () => {
+                    if (await predicate()) return resolve();
+                    if (Date.now() - start > timeoutMs) return reject(new Error("timed out waiting"));
+                    setTimeout(check, 20);
+                };
+                check();
+            });
+        }
+
+        it("creates a terminal, writes a command to it, and reads the output back", async () => {
+            const created = (await executeTool(workspace, "create_terminal", { name: "test" })) as { id: string; name: string };
+            expect(created.id).toBeTruthy();
+
+            await executeTool(workspace, "write_to_terminal", { terminal_id: created.id, input: "echo from-agent-terminal\r" });
+
+            await waitFor(async () => {
+                const output = (await executeTool(workspace, "read_terminal_output", { terminal_id: created.id })) as string;
+                return output.includes("from-agent-terminal");
+            });
+            const output = (await executeTool(workspace, "read_terminal_output", { terminal_id: created.id })) as string;
+            expect(output).toContain("from-agent-terminal");
+        });
+
+        it("closes a terminal so further reads/writes fail", async () => {
+            const created = (await executeTool(workspace, "create_terminal", {})) as { id: string; name: string };
+            await executeTool(workspace, "close_terminal", { terminal_id: created.id });
+            await expect(executeTool(workspace, "read_terminal_output", { terminal_id: created.id })).rejects.toThrow(/No terminal/);
+        });
+
+        it("throws for an unknown terminal id", async () => {
+            await expect(executeTool(workspace, "write_to_terminal", { terminal_id: "nope", input: "x" })).rejects.toThrow(/No terminal/);
         });
     });
 

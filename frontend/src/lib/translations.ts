@@ -117,6 +117,7 @@ export interface Dictionary {
     mcpAdd: string;
     undoLastEdit: string;
     nothingToUndo: string;
+    terminalPanelToggle: string;
     restoredFile: string;
     deletedNewFile: string;
     runTests: string;
@@ -495,6 +496,7 @@ export const en: Dictionary = {
     mcpAdd: "Add",
     undoLastEdit: "Undo last edit",
     nothingToUndo: "Nothing to undo.",
+    terminalPanelToggle: "Terminal",
     restoredFile: "Restored previous content of",
     deletedNewFile: "Removed newly-created file",
     runTests: "Run tests",
@@ -882,6 +884,7 @@ export const tr: Dictionary = {
     mcpAdd: "Ekle",
     undoLastEdit: "Son düzenlemeyi geri al",
     nothingToUndo: "Geri alınacak bir şey yok.",
+    terminalPanelToggle: "Terminal",
     restoredFile: "Önceki içerik geri yüklendi:",
     deletedNewFile: "Yeni oluşturulan dosya kaldırıldı:",
     runTests: "Testleri çalıştır",
