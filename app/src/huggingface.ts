@@ -55,6 +55,12 @@ export interface DownloadProgress {
 // of the app just not knowing about it.
 export const PARTIAL_DOWNLOAD_SUFFIX = ".part";
 
+function parseContentRangeTotal(headerValue: string | null): number | null {
+    // "bytes 12345-67890/98765" — the part after the slash is the full size.
+    const match = headerValue?.match(/\/(\d+)$/);
+    return match ? Number(match[1]) : null;
+}
+
 export async function downloadGgufFile(
     modelId: string,
     filename: string,
@@ -64,19 +70,48 @@ export async function downloadGgufFile(
 ): Promise<void> {
     const fs = await import("node:fs");
     const url = `https://huggingface.co/${modelId}/resolve/main/${encodeURIComponent(filename)}`;
+    const partPath = destPath + PARTIAL_DOWNLOAD_SUFFIX;
+
+    // A .part file left over from a dropped connection or a force-quit is
+    // real progress, not garbage — resume it with a Range request instead of
+    // re-downloading from byte zero every time.
+    let existingBytes = fs.existsSync(partPath) ? fs.statSync(partPath).size : 0;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (existingBytes > 0) headers.Range = `bytes=${existingBytes}-`;
+
     let res: Response;
     try {
-        res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+        res = await fetch(url, { headers });
     } catch (err) {
         throw new Error(`Couldn't reach Hugging Face: ${(err as Error).message}`);
     }
+
+    if (existingBytes > 0 && res.status === 416) {
+        // Our partial is already >= what the server has now (stale, or the
+        // remote file changed) — it can't be resumed, so start clean once.
+        fs.rmSync(partPath, { force: true });
+        return downloadGgufFile(modelId, filename, destPath, onProgress, token);
+    }
+    let resuming = existingBytes > 0 && res.status === 206;
+    if (existingBytes > 0 && !resuming) {
+        // Server ignored the Range request and is sending the whole file
+        // from the start — appending that to the stale partial would
+        // corrupt it, so discard the partial and treat this as fresh.
+        existingBytes = 0;
+    }
+
     if (!res.ok || !res.body) throw new Error(`Failed to download "${filename}" (HTTP ${res.status}).`);
 
-    const totalBytes = Number(res.headers.get("content-length")) || null;
-    let receivedBytes = 0;
-    const partPath = destPath + PARTIAL_DOWNLOAD_SUFFIX;
-    const writeStream = fs.createWriteStream(partPath);
+    const contentLength = Number(res.headers.get("content-length")) || null;
+    const totalBytes = resuming
+        ? (parseContentRangeTotal(res.headers.get("content-range")) ?? (contentLength !== null ? existingBytes + contentLength : null))
+        : contentLength;
+
+    let receivedBytes = existingBytes;
+    const writeStream = fs.createWriteStream(partPath, { flags: resuming ? "a" : "w" });
     const reader = res.body.getReader();
+    onProgress({ receivedBytes, totalBytes });
 
     try {
         while (true) {
@@ -89,8 +124,11 @@ export async function downloadGgufFile(
             });
         }
     } catch (err) {
-        writeStream.end();
-        fs.rmSync(partPath, { force: true });
+        // Deliberately not deleting partPath — a dropped connection here
+        // leaves real, resumable progress on disk for the next attempt.
+        // Waited out rather than fire-and-forget so the partial bytes are
+        // actually flushed to disk before this function returns.
+        await new Promise<void>((resolve) => writeStream.end(() => resolve()));
         throw err;
     }
     await new Promise<void>((resolve, reject) => {
@@ -98,23 +136,9 @@ export async function downloadGgufFile(
         writeStream.end(() => resolve());
     });
     if (totalBytes !== null && receivedBytes !== totalBytes) {
-        fs.rmSync(partPath, { force: true });
-        throw new Error(`Download of "${filename}" was incomplete (got ${receivedBytes} of ${totalBytes} bytes).`);
+        throw new Error(
+            `Download of "${filename}" was incomplete (got ${receivedBytes} of ${totalBytes} bytes) — try downloading it again to resume.`
+        );
     }
     fs.renameSync(partPath, destPath);
-}
-
-// Leftover *.gguf.part files can only come from a download that never
-// finished (crash, force-quit, killed process) — there's no resume support,
-// so they're permanently unusable. Called once at startup rather than left
-// for the user to notice a phantom download stuck at some old percentage.
-export async function cleanupIncompleteDownloads(modelsDir: string): Promise<void> {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    if (!fs.existsSync(modelsDir)) return;
-    for (const f of fs.readdirSync(modelsDir)) {
-        if (f.toLowerCase().endsWith(PARTIAL_DOWNLOAD_SUFFIX)) {
-            fs.rmSync(path.join(modelsDir, f), { force: true });
-        }
-    }
 }

@@ -226,8 +226,12 @@ export async function dispose(): Promise<void> {
 }
 
 export interface LocalGgufModel {
-    // Real file name of the representative shard (part 1, or the lowest part
-    // present) — this is what gets passed back to loadModel/deleteModel.
+    // Path of the representative shard (part 1, or the lowest part present)
+    // relative to the configured models folder, forward-slash separated
+    // (e.g. "bartowski/Some-Model-GGUF/some-model.gguf") — this is what gets
+    // passed back to loadModel/deleteModel. Tools like LM Studio organize
+    // downloads as <publisher>/<model>-GGUF/<file>.gguf, so a flat single
+    // folder isn't enough to find them.
     name: string;
     // What to show in the UI. Same as `name` for a normal single-file model;
     // for a multi-part one it's a synthetic "(N parts)" label instead, since
@@ -286,16 +290,30 @@ export function groupShardedModels(files: RawGgufFile[]): LocalGgufModel[] {
     return [...standalone, ...grouped];
 }
 
+// Bounds the recursive scan below — comfortably covers real-world layouts
+// like LM Studio's <publisher>/<model>-GGUF/<file>.gguf (2 levels deep)
+// without walking into an unrelated, arbitrarily deep folder someone
+// accidentally pointed this setting at.
+const MAX_SCAN_DEPTH = 6;
+
+function walkGgufFiles(root: string, dir: string, depth: number): RawGgufFile[] {
+    if (depth > MAX_SCAN_DEPTH) return [];
+    const files: RawGgufFile[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...walkGgufFiles(root, full, depth + 1));
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".gguf")) {
+            const relative = path.relative(root, full).split(path.sep).join("/");
+            files.push({ name: relative, path: full, sizeBytes: fs.statSync(full).size });
+        }
+    }
+    return files;
+}
+
 export function listModels(modelsDir: string): LocalGgufModel[] {
     if (!fs.existsSync(modelsDir)) return [];
-    const files = fs
-        .readdirSync(modelsDir)
-        .filter((f) => f.toLowerCase().endsWith(".gguf"))
-        .map((f) => {
-            const full = path.join(modelsDir, f);
-            return { name: f, path: full, sizeBytes: fs.statSync(full).size };
-        });
-    return groupShardedModels(files);
+    return groupShardedModels(walkGgufFiles(modelsDir, modelsDir, 0));
 }
 
 // Model paths currently kept warm in modelCache — used for the
@@ -307,10 +325,14 @@ export function listLoadedModels(): string[] {
 
 export async function deleteModel(modelsDir: string, name: string): Promise<void> {
     const root = path.resolve(modelsDir);
-    const target = path.resolve(root, name);
-    if (path.basename(name) !== name || !name.toLowerCase().endsWith(".gguf")) {
+    // `name` may now be a relative path with subfolders (see LocalGgufModel),
+    // so unlike before this can't reject on path separators — instead it
+    // rejects ".." segments and requires the resolved path to still land
+    // inside `root`, which is what actually prevents escaping the directory.
+    if (path.isAbsolute(name) || name.split(/[\\/]/).includes("..") || !name.toLowerCase().endsWith(".gguf")) {
         throw new Error("Invalid model file name.");
     }
+    const target = path.resolve(root, name);
     if (target === root || !target.startsWith(root + path.sep)) {
         throw new Error("Invalid model file name.");
     }
@@ -334,14 +356,17 @@ export async function deleteModel(modelsDir: string, name: string): Promise<void
     fs.rmSync(target, { force: true });
 
     // A multi-part model's sibling shards live under the same name pattern
-    // in the same directory — leaving them behind would orphan otherwise-
-    // unusable files that just sit there confusing the next listModels() call.
-    const shardMatch = name.match(SHARD_PATTERN);
+    // in the same directory as the target — leaving them behind would orphan
+    // otherwise-unusable files that just sit there confusing the next
+    // listModels() call.
+    const targetDir = path.dirname(target);
+    const targetBasename = path.basename(target);
+    const shardMatch = targetBasename.match(SHARD_PATTERN);
     if (shardMatch) {
         const [, base, , , ext] = shardMatch;
         const siblingPattern = new RegExp(`^${escapeRegExp(base)}-\\d+-of-\\d+${escapeRegExp(ext)}$`, "i");
-        for (const f of fs.readdirSync(root)) {
-            if (f !== name && siblingPattern.test(f)) fs.rmSync(path.join(root, f), { force: true });
+        for (const f of fs.readdirSync(targetDir)) {
+            if (f !== targetBasename && siblingPattern.test(f)) fs.rmSync(path.join(targetDir, f), { force: true });
         }
     }
 

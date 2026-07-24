@@ -64,6 +64,33 @@ describe("listModels", () => {
         const names = listModels(dir).map((m) => m.name);
         expect(names).toEqual(["finished.gguf"]);
     });
+
+    it("finds models nested in publisher/model subfolders, e.g. LM Studio's layout", () => {
+        const modelDir = path.join(dir, "bartowski", "Some-Model-GGUF");
+        fs.mkdirSync(modelDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "some-model.gguf"), "x".repeat(20));
+        const models = listModels(dir);
+        expect(models).toHaveLength(1);
+        expect(models[0].name).toBe("bartowski/Some-Model-GGUF/some-model.gguf");
+        expect(models[0].sizeBytes).toBe(20);
+    });
+
+    it("groups shards separately per subfolder instead of merging same-named shards across models", () => {
+        const dirA = path.join(dir, "pub", "Model-A-GGUF");
+        const dirB = path.join(dir, "pub", "Model-B-GGUF");
+        fs.mkdirSync(dirA, { recursive: true });
+        fs.mkdirSync(dirB, { recursive: true });
+        fs.writeFileSync(path.join(dirA, "weights-00001-of-00002.gguf"), "x");
+        fs.writeFileSync(path.join(dirA, "weights-00002-of-00002.gguf"), "x");
+        fs.writeFileSync(path.join(dirB, "weights-00001-of-00002.gguf"), "x");
+        fs.writeFileSync(path.join(dirB, "weights-00002-of-00002.gguf"), "x");
+        const models = listModels(dir);
+        expect(models).toHaveLength(2);
+        expect(models.map((m) => m.name).sort()).toEqual([
+            "pub/Model-A-GGUF/weights-00001-of-00002.gguf",
+            "pub/Model-B-GGUF/weights-00001-of-00002.gguf",
+        ]);
+    });
 });
 
 describe("deleteModel", () => {
@@ -82,5 +109,24 @@ describe("deleteModel", () => {
 
     it("rejects a path-traversal attempt", async () => {
         await expect(deleteModel(dir, "../evil.gguf")).rejects.toThrow(/Invalid model file name/);
+    });
+
+    it("deletes a model nested in a subfolder, and only its own shards", async () => {
+        const modelDir = path.join(dir, "pub", "Model-GGUF");
+        fs.mkdirSync(modelDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "weights-00001-of-00002.gguf"), "x");
+        fs.writeFileSync(path.join(modelDir, "weights-00002-of-00002.gguf"), "x");
+        const otherDir = path.join(dir, "pub", "Other-GGUF");
+        fs.mkdirSync(otherDir, { recursive: true });
+        fs.writeFileSync(path.join(otherDir, "weights-00001-of-00002.gguf"), "x");
+
+        await deleteModel(dir, "pub/Model-GGUF/weights-00001-of-00002.gguf");
+
+        expect(fs.readdirSync(modelDir)).toEqual([]);
+        expect(fs.readdirSync(otherDir)).toEqual(["weights-00001-of-00002.gguf"]);
+    });
+
+    it("rejects a traversal attempt disguised inside a subfolder path", async () => {
+        await expect(deleteModel(dir, "pub/../../evil.gguf")).rejects.toThrow(/Invalid model file name/);
     });
 });
