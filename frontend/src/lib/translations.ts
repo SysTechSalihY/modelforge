@@ -118,6 +118,8 @@ export interface Dictionary {
     undoLastEdit: string;
     nothingToUndo: string;
     terminalPanelToggle: string;
+    verificationCard: string;
+    verificationAttemptCounter: (attempt: number, max: number) => string;
     restoredFile: string;
     deletedNewFile: string;
     runTests: string;
@@ -364,6 +366,13 @@ export interface Dictionary {
     sandboxStatusBubblewrap: string;
     sandboxStatusSandboxExec: string;
     sandboxStatusNone: string;
+    verificationSectionTitle: string;
+    verificationSectionHint: string;
+    verificationEnabledLabel: string;
+    verificationCommandsLabel: string;
+    verificationCommandsHint: string;
+    verificationMaxRetriesLabel: string;
+    verificationMaxRetriesHint: string;
     connectedAccountsTitle: string;
     connectedAccountsHint: string;
     accountGithubHint: string;
@@ -497,6 +506,8 @@ export const en: Dictionary = {
     undoLastEdit: "Undo last edit",
     nothingToUndo: "Nothing to undo.",
     terminalPanelToggle: "Terminal",
+    verificationCard: "Verification",
+    verificationAttemptCounter: (attempt, max) => `attempt ${attempt}/${max}`,
     restoredFile: "Restored previous content of",
     deletedNewFile: "Removed newly-created file",
     runTests: "Run tests",
@@ -751,6 +762,13 @@ export const en: Dictionary = {
     sandboxStatusBubblewrap: "Linux, via bubblewrap — commands run confined to the workspace, with network access denied unless a command explicitly requests it.",
     sandboxStatusSandboxExec: "macOS, via sandbox-exec — commands run confined to the workspace, with network access denied unless a command explicitly requests it.",
     sandboxStatusNone: "Not available on this platform — only the command blocklist and the resource limits below apply. On Linux, installing bubblewrap (bwrap) enables real filesystem and network containment.",
+    verificationSectionTitle: "Verification",
+    verificationSectionHint: "After the agent stops calling tools, optionally run real commands and feed the result back before treating the turn as done — off by default, since this runs commands automatically.",
+    verificationEnabledLabel: "Verify before finishing a turn",
+    verificationCommandsLabel: "Commands to run",
+    verificationCommandsHint: "One per line. Leave blank to use the workspace's detected build/test scripts automatically.",
+    verificationMaxRetriesLabel: "Max retries",
+    verificationMaxRetriesHint: "How many times the agent can try to fix a failing check before it stops and asks you.",
     connectedAccountsTitle: "Connected accounts",
     connectedAccountsHint: "Link developer services for repository analysis and access to private or gated models. Tokens stay encrypted locally when your OS credential store is available.",
     accountGithubHint: "Connect repositories for AI analysis and developer workflows.",
@@ -885,6 +903,8 @@ export const tr: Dictionary = {
     undoLastEdit: "Son düzenlemeyi geri al",
     nothingToUndo: "Geri alınacak bir şey yok.",
     terminalPanelToggle: "Terminal",
+    verificationCard: "Doğrulama",
+    verificationAttemptCounter: (attempt, max) => `${attempt}/${max}. deneme`,
     restoredFile: "Önceki içerik geri yüklendi:",
     deletedNewFile: "Yeni oluşturulan dosya kaldırıldı:",
     runTests: "Testleri çalıştır",
@@ -1139,6 +1159,13 @@ export const tr: Dictionary = {
     sandboxStatusBubblewrap: "Linux, bubblewrap aracılığıyla — komutlar çalışma alanıyla sınırlı çalışır, bir komut açıkça talep etmedikçe ağ erişimi reddedilir.",
     sandboxStatusSandboxExec: "macOS, sandbox-exec aracılığıyla — komutlar çalışma alanıyla sınırlı çalışır, bir komut açıkça talep etmedikçe ağ erişimi reddedilir.",
     sandboxStatusNone: "Bu platformda mevcut değil — yalnızca komut engelleme listesi ve aşağıdaki kaynak sınırları uygulanır. Linux'ta bubblewrap (bwrap) kurmak gerçek dosya sistemi ve ağ sınırlaması sağlar.",
+    verificationSectionTitle: "Doğrulama",
+    verificationSectionHint: "Ajan araç çağırmayı bıraktıktan sonra, isteğe bağlı olarak gerçek komutlar çalıştırıp sonucu geri bildirerek turu bitmiş saymadan önce kontrol edin — komutları otomatik çalıştırdığı için varsayılan olarak kapalıdır.",
+    verificationEnabledLabel: "Turu bitirmeden önce doğrula",
+    verificationCommandsLabel: "Çalıştırılacak komutlar",
+    verificationCommandsHint: "Her satıra bir tane. Çalışma alanının algılanan build/test betiklerini otomatik kullanmak için boş bırakın.",
+    verificationMaxRetriesLabel: "Maksimum yeniden deneme",
+    verificationMaxRetriesHint: "Ajanın başarısız bir kontrolü durup sizden yardım istemeden önce kaç kez düzeltmeyi deneyebileceği.",
     connectedAccountsTitle: "Bağlı hesaplar",
     connectedAccountsHint: "Depo analizi ve özel veya kısıtlı modellere erişim için geliştirici hizmetlerini bağlayın. İşletim sistemi kimlik bilgisi deposu kullanılabildiğinde jetonlar yerel olarak şifreli kalır.",
     accountGithubHint: "Yapay zeka analizi ve geliştirici iş akışları için depoları bağlayın.",

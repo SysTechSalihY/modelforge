@@ -41,6 +41,9 @@ export interface ChatMessage {
     toolName?: string;
     // User-set bookmark, purely a UI affordance — never sent to a provider.
     pinned?: boolean;
+    // Set on the synthetic message the verification loop appends — a UI
+    // affordance like `pinned`, never sent to a provider.
+    isVerification?: boolean;
 }
 
 export interface ChatChunk {

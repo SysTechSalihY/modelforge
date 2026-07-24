@@ -2514,6 +2514,47 @@ export default function Settings() {
                                     </SettingsRow>
                                 </SettingsSection>
 
+                                <SettingsSection title={t.verificationSectionTitle} description={t.verificationSectionHint} className="mt-8">
+                                    <SettingsRow label={t.verificationEnabledLabel}>
+                                        <Button
+                                            size="sm"
+                                            variant={settings.verificationEnabled ? "default" : "outline"}
+                                            onClick={() => saveSettings({ verificationEnabled: !settings.verificationEnabled })}
+                                            className="gap-1.5"
+                                        >
+                                            {settings.verificationEnabled && <Check className="size-3.5" />}
+                                            {settings.verificationEnabled ? t.enabled : t.disabled}
+                                        </Button>
+                                    </SettingsRow>
+                                    <SettingsRow label={t.verificationCommandsLabel} description={t.verificationCommandsHint} stacked>
+                                        <Textarea
+                                            value={(settings.verificationCommands ?? []).join("\n")}
+                                            onChange={(e) =>
+                                                saveSettings({
+                                                    verificationCommands: e.target.value
+                                                        .split("\n")
+                                                        .map((s) => s.trim())
+                                                        .filter(Boolean),
+                                                })
+                                            }
+                                            placeholder="npm run build&#10;npm test"
+                                            className="min-h-20 font-mono text-xs"
+                                            aria-label={t.verificationCommandsLabel}
+                                        />
+                                    </SettingsRow>
+                                    <SettingsRow label={t.verificationMaxRetriesLabel} description={t.verificationMaxRetriesHint}>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={10}
+                                            value={settings.verificationMaxRetries ?? 3}
+                                            onChange={(e) => saveSettings({ verificationMaxRetries: Math.max(1, Math.min(10, Number(e.target.value))) })}
+                                            className="w-24"
+                                            aria-label={t.verificationMaxRetriesLabel}
+                                        />
+                                    </SettingsRow>
+                                </SettingsSection>
+
                                 <SettingsSection
                                     title={t.promptLibrary}
                                     description={t.promptLibraryVariablesHint}

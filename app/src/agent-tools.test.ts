@@ -208,18 +208,24 @@ describe("agent-tools", () => {
                 path.join(workspace, "package.json"),
                 JSON.stringify({ scripts: { test: "vitest", build: "tsc" } })
             );
-            expect(detectProjectScripts(workspace)).toEqual({ test: "npm test", lint: undefined, format: undefined });
+            expect(detectProjectScripts(workspace)).toEqual({
+                test: "npm test",
+                lint: undefined,
+                format: undefined,
+                build: "npm run build",
+            });
         });
 
-        it("reports test, lint, and format scripts together when all are present", () => {
+        it("reports test, lint, format, and build scripts together when all are present", () => {
             fs.writeFileSync(
                 path.join(workspace, "package.json"),
-                JSON.stringify({ scripts: { test: "vitest", lint: "eslint .", format: "prettier --write ." } })
+                JSON.stringify({ scripts: { test: "vitest", lint: "eslint .", format: "prettier --write .", build: "tsc" } })
             );
             expect(detectProjectScripts(workspace)).toEqual({
                 test: "npm test",
                 lint: "npm run lint",
                 format: "npm run format",
+                build: "npm run build",
             });
         });
     });

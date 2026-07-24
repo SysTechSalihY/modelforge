@@ -110,6 +110,18 @@ export interface AppSettings {
     // a runaway process rather than act as a real resource quota system.
     sandboxMaxMemoryMB?: number;
     sandboxMaxCpuPercent?: number;
+    // Verification loop (Agent mode): once a turn ends with the model
+    // calling no more tools, optionally run these command(s) for real and
+    // feed the result back before treating the turn as actually finished.
+    // Off by default — running commands automatically after every turn
+    // would surprise anyone who didn't explicitly turn it on.
+    // verificationCommands unset falls back to the workspace's detected
+    // build/test scripts (see detectProjectScripts) at the point of use.
+    verificationEnabled?: boolean;
+    verificationCommands?: string[];
+    // Distinct from agentMaxSteps — bounds verify-fail-retry cycles
+    // specifically, so a persistently failing check can't loop forever.
+    verificationMaxRetries?: number;
 }
 
 const DEFAULTS: AppSettings = {
@@ -131,6 +143,8 @@ const DEFAULTS: AppSettings = {
     llamaCppMaxCachedModels: 2,
     networkToolsEnabled: true,
     sandboxMaxMemoryMB: 2048,
+    verificationEnabled: false,
+    verificationMaxRetries: 3,
 };
 
 function filePath(): string {

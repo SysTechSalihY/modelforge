@@ -250,6 +250,24 @@ const MessageBubble = memo(function MessageBubble({
     const { t } = useI18n();
 
     if (m.role === "tool") {
+        if (m.isVerification) {
+            const passed = m.content.startsWith("Verification passed");
+            return (
+                <div className="flex flex-col items-start">
+                    <div
+                        className={cn(
+                            "max-w-[85%] rounded-lg border px-3 py-2 text-sm",
+                            passed ? "border-primary/30 bg-primary/5" : "border-destructive/40 bg-destructive/5"
+                        )}
+                    >
+                        <div className={cn("mb-1 flex items-center gap-1.5 font-medium", passed ? "text-primary" : "text-destructive")}>
+                            {passed ? <Check className="size-3.5" /> : <AlertTriangle className="size-3.5" />} {t.verificationCard}
+                        </div>
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs text-muted-foreground">{m.content}</pre>
+                    </div>
+                </div>
+            );
+        }
         // Tool failures get a visually distinct card — an agent run that hit
         // an error mid-way should be scannable at a glance, not require
         // reading every result body to find where things went wrong.
@@ -454,6 +472,10 @@ export default function Chat() {
     const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([]);
     const [pendingVariablePreset, setPendingVariablePreset] = useState<PromptPreset | null>(null);
     const [agentStepCount, setAgentStepCount] = useState(0);
+    // Separate from agentStepCount — bounds verify-fail-retry cycles
+    // specifically, so a persistently failing check can't loop forever even
+    // while agentMaxSteps still has headroom left.
+    const [verificationAttempt, setVerificationAttempt] = useState(0);
     const [autoApprovedTools, setAutoApprovedTools] = useState<Set<string>>(new Set());
     const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
     const [contextSummary, setContextSummary] = useState<string | null>(null);
@@ -550,6 +572,7 @@ export default function Chat() {
             setAgentWorkspace(session.agentWorkspace ?? null);
             setPendingToolCalls([]);
             setAgentStepCount(0);
+            setVerificationAttempt(0);
             setPlanSteps(session.planSteps ?? []);
             setContextSummary(session.contextSummary ?? null);
             setContextSummaryThroughIndex(session.contextSummaryThroughIndex ?? 0);
@@ -1073,6 +1096,18 @@ export default function Chat() {
                 for (const call of otherCalls) {
                     if (call.name !== "request_checkpoint" && autoApprovedTools.has(call.name)) respondToToolCall(call, true);
                 }
+            } else if (
+                agentMode &&
+                agentWorkspace &&
+                settings?.verificationEnabled &&
+                !result.error &&
+                last?.role === "assistant" &&
+                verificationAttempt < (settings.verificationMaxRetries ?? 3)
+            ) {
+                // Fire-and-forget: this updater must stay synchronous, the
+                // actual command runs (and any setState that follows) happen
+                // later once the awaited calls inside resolve.
+                void runVerification(finalMessages);
             } else if (settings?.ttsAutoRead && !result.error && last?.role === "assistant" && last.content) {
                 const lastIndex = finalMessages.length - 1;
                 setSpeakingIndex(lastIndex);
@@ -1088,6 +1123,59 @@ export default function Chat() {
                 .then(() => refresh());
             return finalMessages;
         });
+    }
+
+    // Runs once a turn ends with the model calling no more tools — i.e. it
+    // believes it's done. Deterministic and app-driven rather than asking
+    // the model whether to check its own work: runs the configured
+    // command(s) for real via the same run_command path everything else
+    // uses (inheriting whatever sandboxing/resource limits are configured),
+    // and only lets the turn actually end once they pass.
+    async function runVerification(finalMessages: ChatMessage[]) {
+        if (!agentWorkspace) return;
+        const commands = settings?.verificationCommands?.length
+            ? settings.verificationCommands
+            : [projectScripts.build, projectScripts.test].filter((c): c is string => Boolean(c));
+        if (commands.length === 0) return;
+
+        const results: { command: string; passed: boolean; output: string }[] = [];
+        for (const command of commands) {
+            const res = await window.api.agent.executeTool(agentWorkspace, "run_command", { command });
+            const output = typeof res.result === "string" ? res.result : (res.error ?? "");
+            results.push({ command, passed: !res.error && output.includes("Exit code: 0"), output });
+        }
+        const allPassed = results.every((r) => r.passed);
+        const checklist = results.map((r) => `${r.passed ? "✅" : "❌"} ${r.command}`).join("\n");
+        const failureDetail = results
+            .filter((r) => !r.passed)
+            .map((r) => `--- ${r.command} ---\n${r.output}`)
+            .join("\n\n");
+        const verificationMessage: ChatMessage = {
+            role: "tool",
+            content: allPassed
+                ? `Verification passed:\n${checklist}`
+                : `Verification failed:\n${checklist}\n\n${failureDetail}`,
+            isVerification: true,
+        };
+        const nextMessages = [...finalMessages, verificationMessage];
+        setMessages(nextMessages);
+        if (sessionId) window.api.sessions.update(sessionId, { messages: nextMessages });
+
+        if (allPassed) return; // the turn really is done
+
+        const maxRetries = settings?.verificationMaxRetries ?? 3;
+        if (verificationAttempt + 1 >= maxRetries) {
+            setMessages((m) => [
+                ...m,
+                {
+                    role: "assistant",
+                    content: `⚠️ Verification kept failing after ${maxRetries} attempt${maxRetries === 1 ? "" : "s"}. Send another message to try again.`,
+                },
+            ]);
+            return;
+        }
+        setVerificationAttempt((a) => a + 1);
+        continueAfterTools(nextMessages);
     }
 
     // Runs after every tool call from one assistant turn has been approved or
@@ -1261,6 +1349,7 @@ export default function Chat() {
         setRagFolders([]);
         setImageAttachments([]);
         setAgentStepCount(0);
+        setVerificationAttempt(0);
         setPlanSteps([]);
         window.api.sessions.update(sessionId, { planSteps: [] });
         await runCompletion(history, baseMessages, { isFirstMessage, titleSource });
@@ -1588,6 +1677,11 @@ export default function Chat() {
                 {agentStepCount > 0 && (
                     <span className="text-xs text-muted-foreground" title={t.agentStepTooltip}>
                         {t.agentStep} {agentStepCount}/{agentMaxSteps}
+                    </span>
+                )}
+                {verificationAttempt > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                        {t.verificationCard} {t.verificationAttemptCounter(verificationAttempt, settings?.verificationMaxRetries ?? 3)}
                     </span>
                 )}
                 {agentMode && agentWorkspace && (

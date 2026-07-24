@@ -1315,11 +1315,14 @@ export interface ProjectScripts {
     test?: string;
     lint?: string;
     format?: string;
+    build?: string;
 }
 
-// Backs the Test/Lint/Format quick-action buttons — only npm-style
-// package.json scripts are recognized, which covers the JS/TS projects this
-// app's Agent mode is primarily used against.
+// Backs the Test/Lint/Format quick-action buttons, and (build + test) the
+// default command list for the verification loop when the user hasn't set
+// an explicit override — only npm-style package.json scripts are
+// recognized, which covers the JS/TS projects this app's Agent mode is
+// primarily used against.
 export function detectProjectScripts(workspaceRoot: string): ProjectScripts {
     const pkgPath = resolveSafePath(workspaceRoot, "package.json");
     let scripts: Record<string, string> = {};
@@ -1333,6 +1336,7 @@ export function detectProjectScripts(workspaceRoot: string): ProjectScripts {
         test: scripts.test ? "npm test" : undefined,
         lint: scripts.lint ? "npm run lint" : undefined,
         format: scripts.format ? "npm run format" : undefined,
+        build: scripts.build ? "npm run build" : undefined,
     };
 }
 

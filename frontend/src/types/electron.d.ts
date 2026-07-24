@@ -34,6 +34,10 @@ export interface ChatMessage {
   toolCallId?: string;
   toolName?: string;
   pinned?: boolean;
+  // Set on the synthetic tool-role message the verification loop appends —
+  // distinguishes it from a real tool result so the UI can render it as a
+  // pass/fail checklist card instead of a generic tool-output box.
+  isVerification?: boolean;
 }
 
 export interface ChatChunk {
@@ -153,6 +157,7 @@ export interface ProjectScripts {
   test?: string;
   lint?: string;
   format?: string;
+  build?: string;
 }
 
 export interface SandboxCapabilities {
@@ -254,6 +259,9 @@ export interface AppSettings {
   networkToolsEnabled?: boolean;
   sandboxMaxMemoryMB?: number;
   sandboxMaxCpuPercent?: number;
+  verificationEnabled?: boolean;
+  verificationCommands?: string[];
+  verificationMaxRetries?: number;
 }
 
 export interface ChatOptions {
