@@ -1456,7 +1456,7 @@ export default function Chat() {
                                 <SelectLabel>llama.cpp (local)</SelectLabel>
                                 {llamaCppModels.map((m) => (
                                     <SelectItem key={m.name} value={formatModelRef("llamacpp", m.name)}>
-                                        {m.name}
+                                        {m.label}
                                     </SelectItem>
                                 ))}
                             </SelectGroup>
@@ -1476,7 +1476,7 @@ export default function Chat() {
                                 <SelectLabel>ROCm (AMD)</SelectLabel>
                                 {llamaCppModels.map((m) => (
                                     <SelectItem key={m.name} value={formatModelRef("rocm", m.name)}>
-                                        {m.name}
+                                        {m.label}
                                     </SelectItem>
                                 ))}
                             </SelectGroup>

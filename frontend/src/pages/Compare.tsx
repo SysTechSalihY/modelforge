@@ -42,7 +42,7 @@ export default function Compare() {
 
     const candidates: CandidateModel[] = [
         ...ollamaModels.map((m) => ({ ref: formatModelRef("ollama", m.name), label: `${m.name} (Ollama)` })),
-        ...llamaCppModels.map((m) => ({ ref: formatModelRef("llamacpp", m.name), label: `${m.name} (llama.cpp)` })),
+        ...llamaCppModels.map((m) => ({ ref: formatModelRef("llamacpp", m.name), label: `${m.label} (llama.cpp)` })),
         ...OPENAI_MODELS.map((m) => ({ ref: formatModelRef("openai", m.id), label: m.label })),
         ...ANTHROPIC_MODELS.map((m) => ({ ref: formatModelRef("anthropic", m.id), label: m.label })),
         ...GEMINI_MODELS.map((m) => ({ ref: formatModelRef("gemini", m.id), label: m.label })),

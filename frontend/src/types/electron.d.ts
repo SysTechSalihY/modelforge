@@ -350,6 +350,7 @@ export interface CustomProviderConfig {
 
 export interface LocalGgufModel {
   name: string;
+  label: string;
   path: string;
   sizeBytes: number;
 }

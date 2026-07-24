@@ -337,7 +337,8 @@ export default function Settings() {
             delete next[key];
             return next;
         });
-        if (!res.error) window.api.llamacpp.listModels().then(setLlamaCppModels);
+        if (res.error) toast.error(res.error);
+        else window.api.llamacpp.listModels().then(setLlamaCppModels);
     }
 
     async function deleteLlamaCppModel(name: string) {
@@ -1094,12 +1095,12 @@ export default function Settings() {
                                     </div>
                                 </SettingsRow>
                                 {llamaCppModels.map((m) => (
-                                    <SettingsRow key={m.name} label={m.name} description={formatBytes(m.sizeBytes)}>
+                                    <SettingsRow key={m.name} label={m.label} description={formatBytes(m.sizeBytes)}>
                                         <Button
                                             size="icon"
                                             variant="ghost"
                                             onClick={() => deleteLlamaCppModel(m.name)}
-                                            aria-label={`Delete ${m.name}`}
+                                            aria-label={`Delete ${m.label}`}
                                         >
                                             <Trash2 className="text-destructive" />
                                         </Button>

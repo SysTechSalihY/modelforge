@@ -226,20 +226,76 @@ export async function dispose(): Promise<void> {
 }
 
 export interface LocalGgufModel {
+    // Real file name of the representative shard (part 1, or the lowest part
+    // present) — this is what gets passed back to loadModel/deleteModel.
+    name: string;
+    // What to show in the UI. Same as `name` for a normal single-file model;
+    // for a multi-part one it's a synthetic "(N parts)" label instead, since
+    // showing the raw "-00001-of-00002.gguf" filename as if it were the
+    // whole model's name is misleading.
+    label: string;
+    path: string;
+    sizeBytes: number;
+}
+
+// Matches Hugging Face's multi-part GGUF naming convention, e.g.
+// "Qwen3-Coder-Next-Q6_K-00001-of-00002.gguf". node-llama-cpp loads every
+// part automatically once given the path to part 1, so listing each shard
+// as its own separate model is both confusing (one weight file looks like
+// two different models) and wrong (selecting a non-first shard on its own
+// doesn't work) — group them into a single entry instead.
+const SHARD_PATTERN = /^(.*)-(\d+)-of-(\d+)(\.gguf)$/i;
+
+interface RawGgufFile {
     name: string;
     path: string;
     sizeBytes: number;
 }
 
+export function groupShardedModels(files: RawGgufFile[]): LocalGgufModel[] {
+    const groups = new Map<string, { totalSize: number; parts: Map<number, RawGgufFile> }>();
+    const standalone: LocalGgufModel[] = [];
+
+    for (const file of files) {
+        const match = file.name.match(SHARD_PATTERN);
+        if (!match) {
+            standalone.push({ ...file, label: file.name });
+            continue;
+        }
+        const [, base, partStr, , ext] = match;
+        const key = `${base}${ext}`;
+        const part = Number(partStr);
+        const group = groups.get(key) ?? { totalSize: 0, parts: new Map() };
+        group.totalSize += file.sizeBytes;
+        group.parts.set(part, file);
+        groups.set(key, group);
+    }
+
+    const grouped: LocalGgufModel[] = [...groups.entries()].map(([key, group]) => {
+        const lowestPart = Math.min(...group.parts.keys());
+        const representative = group.parts.get(lowestPart)!;
+        const partCount = group.parts.size;
+        return {
+            name: representative.name,
+            label: partCount > 1 ? `${key} (${partCount} parts)` : representative.name,
+            path: representative.path,
+            sizeBytes: group.totalSize,
+        };
+    });
+
+    return [...standalone, ...grouped];
+}
+
 export function listModels(modelsDir: string): LocalGgufModel[] {
     if (!fs.existsSync(modelsDir)) return [];
-    return fs
+    const files = fs
         .readdirSync(modelsDir)
         .filter((f) => f.toLowerCase().endsWith(".gguf"))
         .map((f) => {
             const full = path.join(modelsDir, f);
             return { name: f, path: full, sizeBytes: fs.statSync(full).size };
         });
+    return groupShardedModels(files);
 }
 
 // Model paths currently kept warm in modelCache — used for the
@@ -276,7 +332,24 @@ export async function deleteModel(modelsDir: string, name: string): Promise<void
     }
     await Promise.allSettled(modelsToDispose.map((model) => model.dispose()));
     fs.rmSync(target, { force: true });
+
+    // A multi-part model's sibling shards live under the same name pattern
+    // in the same directory — leaving them behind would orphan otherwise-
+    // unusable files that just sit there confusing the next listModels() call.
+    const shardMatch = name.match(SHARD_PATTERN);
+    if (shardMatch) {
+        const [, base, , , ext] = shardMatch;
+        const siblingPattern = new RegExp(`^${escapeRegExp(base)}-\\d+-of-\\d+${escapeRegExp(ext)}$`, "i");
+        for (const f of fs.readdirSync(root)) {
+            if (f !== name && siblingPattern.test(f)) fs.rmSync(path.join(root, f), { force: true });
+        }
+    }
+
     scheduleIdleEviction();
+}
+
+function escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Maps this app's provider-agnostic ChatMessage[] (system/user/assistant,

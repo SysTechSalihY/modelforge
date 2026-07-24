@@ -47,6 +47,14 @@ export interface DownloadProgress {
     totalBytes: number | null;
 }
 
+// Suffix for in-progress downloads. Writing directly to the final .gguf name
+// would let a truncated file — from a network drop, a crash, or the app
+// being force-quit mid-download, none of which run our error-path cleanup —
+// sit there indistinguishable from a real model, so listModels() would offer
+// it and loading it would fail with a confusing "corrupt GGUF" error instead
+// of the app just not knowing about it.
+export const PARTIAL_DOWNLOAD_SUFFIX = ".part";
+
 export async function downloadGgufFile(
     modelId: string,
     filename: string,
@@ -66,7 +74,8 @@ export async function downloadGgufFile(
 
     const totalBytes = Number(res.headers.get("content-length")) || null;
     let receivedBytes = 0;
-    const writeStream = fs.createWriteStream(destPath);
+    const partPath = destPath + PARTIAL_DOWNLOAD_SUFFIX;
+    const writeStream = fs.createWriteStream(partPath);
     const reader = res.body.getReader();
 
     try {
@@ -79,7 +88,33 @@ export async function downloadGgufFile(
                 writeStream.write(value, (err) => (err ? reject(err) : resolve()));
             });
         }
-    } finally {
+    } catch (err) {
         writeStream.end();
+        fs.rmSync(partPath, { force: true });
+        throw err;
+    }
+    await new Promise<void>((resolve, reject) => {
+        writeStream.once("error", reject);
+        writeStream.end(() => resolve());
+    });
+    if (totalBytes !== null && receivedBytes !== totalBytes) {
+        fs.rmSync(partPath, { force: true });
+        throw new Error(`Download of "${filename}" was incomplete (got ${receivedBytes} of ${totalBytes} bytes).`);
+    }
+    fs.renameSync(partPath, destPath);
+}
+
+// Leftover *.gguf.part files can only come from a download that never
+// finished (crash, force-quit, killed process) — there's no resume support,
+// so they're permanently unusable. Called once at startup rather than left
+// for the user to notice a phantom download stuck at some old percentage.
+export async function cleanupIncompleteDownloads(modelsDir: string): Promise<void> {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    if (!fs.existsSync(modelsDir)) return;
+    for (const f of fs.readdirSync(modelsDir)) {
+        if (f.toLowerCase().endsWith(PARTIAL_DOWNLOAD_SUFFIX)) {
+            fs.rmSync(path.join(modelsDir, f), { force: true });
+        }
     }
 }

@@ -767,6 +767,10 @@ app.whenReady().then(async () => {
     await ollama.start();
     llamacpp.setModelCacheLimit(settingsStore.getSettings().llamaCppMaxCachedModels ?? 2);
     await llamacpp.setGpuBackend(settingsStore.getSettings().llamaCppGpuBackend ?? "auto");
+    // Leftover *.gguf.part files from a download that never finished last
+    // session (crash, force-quit) — there's no resume support, so they can
+    // only ever be dead weight; clear them before the model list is ever read.
+    await huggingface.cleanupIncompleteDownloads(getLlamaCppModelsDir());
     setupAutoUpdater(() => mainWindow);
     void connectEnabledMcpServers();
     scheduler.init((provider, model, prompt) => completePrompt(provider as ProviderId, model, prompt));
