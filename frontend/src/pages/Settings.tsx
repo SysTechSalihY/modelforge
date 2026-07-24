@@ -1072,10 +1072,10 @@ export default function Settings() {
                                         </SelectContent>
                                     </Select>
                                 </SettingsRow>
-                                <SettingsRow label={t.modelsDir} stacked>
+                                <SettingsRow label={t.modelsDir} description={t.llamaCppModelsDirHint} stacked>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="truncate rounded border border-border bg-muted px-2 py-1 font-mono text-xs">
-                                            {settings.llamaCppModelsDir ?? t.modelsDirDefault}
+                                            {settings.llamaCppModelsDir ?? t.llamaCppModelsDirDefault}
                                         </span>
                                         <Button
                                             size="sm"

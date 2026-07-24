@@ -126,6 +126,8 @@ export interface Dictionary {
     modelsDir: string;
     modelsDirHint: string;
     modelsDirDefault: string;
+    llamaCppModelsDirDefault: string;
+    llamaCppModelsDirHint: string;
     chooseFolder: string;
     modelsDirApplied: string;
     modelsDirFailed: string;
@@ -490,6 +492,8 @@ export const en: Dictionary = {
     modelsDir: "Model storage location",
     modelsDirHint: "Where Ollama downloads and stores model files. Changing this restarts Ollama (only if this app started it) — running downloads will be interrupted.",
     modelsDirDefault: "Default (Ollama's own location)",
+    llamaCppModelsDirDefault: "Default (app data folder)",
+    llamaCppModelsDirHint: "Where llama.cpp looks for .gguf files — separate from Ollama's own storage above. Files must sit directly in this folder (not a subfolder) with a .gguf extension.",
     chooseFolder: "Choose folder...",
     modelsDirApplied: "Applied — Ollama restarted with the new location.",
     modelsDirFailed: "Couldn't restart Ollama with the new location. Try starting it manually.",
@@ -863,6 +867,8 @@ export const tr: Dictionary = {
     modelsDir: "Model depolama konumu",
     modelsDirHint: "Ollama'nın model dosyalarını indirdiği ve sakladığı yer. Bunu değiştirmek Ollama'yı yeniden başlatır (yalnızca bu uygulama başlattıysa) — devam eden indirmeler kesintiye uğrar.",
     modelsDirDefault: "Varsayılan (Ollama'nın kendi konumu)",
+    llamaCppModelsDirDefault: "Varsayılan (uygulama veri klasörü)",
+    llamaCppModelsDirHint: "llama.cpp'nin .gguf dosyalarını aradığı yer — yukarıdaki Ollama'nın kendi deposundan ayrıdır. Dosyalar bir alt klasörde değil, doğrudan bu klasörde olmalı ve .gguf uzantılı olmalıdır.",
     chooseFolder: "Klasör seç...",
     modelsDirApplied: "Uygulandı — Ollama yeni konumla yeniden başlatıldı.",
     modelsDirFailed: "Ollama yeni konumla yeniden başlatılamadı. Elle başlatmayı deneyin.",
