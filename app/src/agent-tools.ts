@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { ToolDefinition } from "./providers/types";
 import { getAccountToken } from "./accounts";
 import { capturePageScreenshot } from "./browser-capture";
+import { killProcessTree } from "./process-tree";
 
 const execAsync = promisify(exec);
 
@@ -835,6 +836,10 @@ interface BackgroundTask {
     name: string;
     command: string;
     process: ChildProcess;
+    // Absolute path — lets killBackgroundCommandsForWorkspace() target only
+    // the tasks that belong to a workspace being switched away from, rather
+    // than every background task the process has ever started.
+    workspaceRoot: string;
     // Rolling tail of combined stdout+stderr — capped so a chatty dev server
     // can't grow memory unboundedly over a long session.
     output: string;
@@ -861,13 +866,24 @@ export function startBackgroundCommand(
     }
 
     const cwd = resolveSafePath(workspaceRoot, relativeCwd);
-    const child = spawn(command, { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+    // detached so the shell becomes its own process group leader — lets
+    // killProcessTree() below signal the whole group (shell + whatever it
+    // spawned, e.g. `npm run dev` spawning `node`) instead of just the shell
+    // itself, which is all a plain .kill() would reach. No effect on Windows,
+    // where killProcessTree uses `taskkill /t` instead.
+    const child = spawn(command, {
+        cwd,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+    });
     const id = randomUUID().slice(0, 8);
     const task: BackgroundTask = {
         id,
         name: name?.trim() || command.slice(0, 40),
         command,
         process: child,
+        workspaceRoot: path.resolve(workspaceRoot),
         output: "",
         exitCode: null,
         startedAt: Date.now(),
@@ -909,7 +925,7 @@ export function stopBackgroundCommand(taskId: string): string {
     const task = backgroundTasks.get(taskId);
     if (!task) throw new Error(`No background task with id "${taskId}".`);
     if (task.exitCode !== null) return `Task ${task.id} had already exited with code ${task.exitCode}.`;
-    task.process.kill();
+    if (task.process.pid) killProcessTree(task.process.pid);
     return `Task ${task.id} (${task.name}) stopped.`;
 }
 
@@ -924,9 +940,26 @@ export function listBackgroundCommands(): { id: string; name: string; command: s
 
 export function killAllBackgroundCommands(): void {
     for (const task of backgroundTasks.values()) {
-        if (task.exitCode === null) task.process.kill();
+        if (task.exitCode === null && task.process.pid) killProcessTree(task.process.pid);
     }
     backgroundTasks.clear();
+}
+
+// Only tears down tasks belonging to the workspace being switched away from
+// — background commands are otherwise never cleaned up until app quit
+// (killAllBackgroundCommands, called from window-all-closed/before-quit),
+// so switching to a different workspace mid-session used to leave the old
+// one's tasks running indefinitely, silently eating into MAX_BACKGROUND_TASKS.
+export function killBackgroundCommandsForWorkspace(workspaceRoot: string): number {
+    const root = path.resolve(workspaceRoot);
+    let killed = 0;
+    for (const [id, task] of backgroundTasks) {
+        if (task.workspaceRoot !== root) continue;
+        if (task.exitCode === null && task.process.pid) killProcessTree(task.process.pid);
+        backgroundTasks.delete(id);
+        killed++;
+    }
+    return killed;
 }
 
 function gitCommand(workspaceRoot: string, args: string): Promise<string> {

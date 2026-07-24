@@ -230,6 +230,8 @@ contextBridge.exposeInMainWorld("api", {
             ipcRenderer.invoke("agent:rollbackLastWrite", workspaceRoot),
         detectScripts: (workspaceRoot: string): Promise<ProjectScripts> =>
             ipcRenderer.invoke("agent:detectScripts", workspaceRoot),
+        closeWorkspace: (workspaceRoot: string): Promise<{ killedBackgroundTasks: number }> =>
+            ipcRenderer.invoke("agent:closeWorkspace", workspaceRoot),
     },
 
     mcp: {

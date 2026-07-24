@@ -754,6 +754,17 @@ function registerIpcHandlers(): void {
         return agentTools.detectProjectScripts(workspaceRoot);
     });
 
+    // Called when the renderer is about to stop using a workspace (switching
+    // to a different folder, or loading a session that points elsewhere) —
+    // without this, background tasks started against the old workspace kept
+    // running indefinitely, since killAllBackgroundCommands() only ever ran
+    // on app quit.
+    ipcMain.handle("agent:closeWorkspace", (_event: IpcMainInvokeEvent, workspaceRoot: string) => {
+        requireString(workspaceRoot, "workspace root");
+        const killedBackgroundTasks = agentTools.killBackgroundCommandsForWorkspace(workspaceRoot);
+        return { killedBackgroundTasks };
+    });
+
     ipcMain.handle("mcp:connect", async (_event: IpcMainInvokeEvent, config: McpServerConfig) => {
         try {
             const { tools } = await mcpClient.connectServer(config);

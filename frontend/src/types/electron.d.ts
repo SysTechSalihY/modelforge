@@ -511,6 +511,7 @@ export interface ElectronApi {
     ) => Promise<{ result?: unknown; error?: string }>;
     rollbackLastWrite: (workspaceRoot: string) => Promise<RollbackResult | null>;
     detectScripts: (workspaceRoot: string) => Promise<ProjectScripts>;
+    closeWorkspace: (workspaceRoot: string) => Promise<{ killedBackgroundTasks: number }>;
   };
   mcp: {
     connect: (

@@ -465,6 +465,16 @@ export default function Chat() {
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
+    // Tracks the workspace this component last told the main process about,
+    // so switching away from one (a different session, or picking a new
+    // folder) can close out its background tasks instead of leaving them
+    // running until app quit.
+    const prevWorkspaceRef = useRef<string | null>(null);
+    function closeWorkspaceIfChanged(next: string | null) {
+        const prev = prevWorkspaceRef.current;
+        if (prev && prev !== next) window.api.agent.closeWorkspace(prev);
+        prevWorkspaceRef.current = next;
+    }
 
     // No session selected yet: pick the most recent one, or create a new one.
     useEffect(() => {
@@ -532,6 +542,7 @@ export default function Chat() {
             setParams(session.params ?? {});
             setSessionSystemPrompt(session.systemPrompt ?? null);
             setAgentMode(session.agentMode ?? false);
+            closeWorkspaceIfChanged(session.agentWorkspace ?? null);
             setAgentWorkspace(session.agentWorkspace ?? null);
             setPendingToolCalls([]);
             setAgentStepCount(0);
@@ -624,6 +635,7 @@ export default function Chat() {
             // workspace folder up front rather than letting tool calls fail later.
             const folder = await window.api.agent.pickWorkspace();
             if (!folder) return;
+            closeWorkspaceIfChanged(folder);
             setAgentWorkspace(folder);
             setAgentMode(true);
             window.api.sessions.update(sessionId, { agentMode: true, agentWorkspace: folder });
@@ -638,6 +650,7 @@ export default function Chat() {
         if (!sessionId) return;
         const folder = await window.api.agent.pickWorkspace();
         if (!folder) return;
+        closeWorkspaceIfChanged(folder);
         setAgentWorkspace(folder);
         window.api.sessions.update(sessionId, { agentWorkspace: folder });
     }

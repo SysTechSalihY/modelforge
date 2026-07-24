@@ -31,6 +31,7 @@ import {
     stopBackgroundCommand,
     listBackgroundCommands,
     killAllBackgroundCommands,
+    killBackgroundCommandsForWorkspace,
     httpRequest,
     findSymbolReferences,
     applyPatch,
@@ -493,6 +494,25 @@ describe("agent-tools", () => {
         it("caps the number of concurrently running background tasks", () => {
             for (let i = 0; i < 5; i++) startBackgroundCommand(workspace, "sleep 5", ".", `task-${i}`);
             expect(() => startBackgroundCommand(workspace, "sleep 5")).toThrow(/Already running/);
+        });
+
+        it("kills and forgets only the tasks belonging to the given workspace, leaving other workspaces' tasks running", () => {
+            const otherWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), "agent-tools-test-other-"));
+            const { taskId: taskA } = startBackgroundCommand(workspace, "sleep 30");
+            const { taskId: taskB } = startBackgroundCommand(otherWorkspace, "sleep 30");
+
+            const killedCount = killBackgroundCommandsForWorkspace(workspace);
+
+            expect(killedCount).toBe(1);
+            // Killed AND removed from tracking — a task from a workspace you've
+            // switched away from shouldn't linger as a queryable id.
+            expect(() => getBackgroundOutput(taskA)).toThrow(/No background task/);
+            expect(getBackgroundOutput(taskB)).toContain("running");
+            fs.rmSync(otherWorkspace, { recursive: true, force: true });
+        });
+
+        it("returns 0 when the workspace has no background tasks", () => {
+            expect(killBackgroundCommandsForWorkspace(workspace)).toBe(0);
         });
     });
 
