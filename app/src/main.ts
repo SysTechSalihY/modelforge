@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
+import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog, shell, desktopCapturer } from "electron";
 import * as ollama from "./ollama-manager";
 import { logger, getLogPath, getLogTail } from "./logger";
@@ -138,35 +139,52 @@ function createWindow(): void {
         }
     });
 
-    // Chat content can contain links (from the user or from a model's output).
-    // Without this, clicking one would either silently do nothing or open an
-    // unmanaged Electron window; instead hand it to the OS's default browser
-    // and keep every window in this app on our own trusted content only.
+    // The app's one legitimate page — loaded via this exact URL below, so
+    // will-navigate can tell "the app reloading itself" apart from
+    // "something is trying to navigate away" by exact match, rather than by
+    // comparing .origin. Comparing .origin doesn't work here:
+    // packaged builds load over file:, and *every* file: URL reports
+    // origin "null", so two completely unrelated local files would compare
+    // as "same origin" and be allowed to navigate straight through.
+    const homeUrl = app.isPackaged
+        ? pathToFileURL(path.join(process.resourcesPath, "frontend-dist", "index.html")).href
+        : "http://localhost:5173/";
+
+    // Only http(s) ever gets handed to the OS — chat content can contain
+    // arbitrary links (from the user or from a model's output), and hitting
+    // shell.openExternal() with whatever protocol it happens to be would let
+    // a crafted file:, custom-scheme, or OS-handler URL launch an unintended
+    // local application or open an arbitrary local file.
+    function isSafeExternalUrl(url: string): boolean {
+        try {
+            const protocol = new URL(url).protocol;
+            return protocol === "http:" || protocol === "https:";
+        } catch {
+            return false;
+        }
+    }
+
+    // Chat content can contain links. Without this, clicking one would
+    // either silently do nothing or open an unmanaged Electron window;
+    // instead hand safe links to the OS's default browser and keep this
+    // window on the app's own content only.
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url);
+        if (isSafeExternalUrl(url)) shell.openExternal(url);
         return { action: "deny" };
     });
     mainWindow.webContents.on("will-navigate", (event, url) => {
-        const currentUrl = mainWindow?.webContents.getURL() ?? "";
-        const sameOrigin = (() => {
-            try {
-                return new URL(url).origin === new URL(currentUrl).origin;
-            } catch {
-                return false;
-            }
-        })();
-        if (!sameOrigin) {
-            event.preventDefault();
-            shell.openExternal(url);
-        }
+        if (url === homeUrl) return;
+        event.preventDefault();
+        if (isSafeExternalUrl(url)) shell.openExternal(url);
     });
 
-    if (!app.isPackaged) {
-        mainWindow.loadURL("http://localhost:5173");
-    } else {
-        // extraResources (electron-builder) copies frontend/dist to resources/frontend-dist.
-        mainWindow.loadFile(path.join(process.resourcesPath, "frontend-dist", "index.html"));
-    }
+    // Loading homeUrl itself here (rather than loadFile(), which builds its
+    // own file: URL independently) guarantees this is byte-identical to what
+    // will-navigate compares against above — any discrepancy between the two
+    // encodings (e.g. a non-ASCII character in the install path) would make
+    // the app's own initial load fail the exact-match check and get blocked.
+    // extraResources (electron-builder) copies frontend/dist to resources/frontend-dist.
+    mainWindow.loadURL(homeUrl);
 }
 
 // Shared by chat:send (renderer-driven, streams tokens back over IPC) and
@@ -184,7 +202,14 @@ async function dispatchChat(
     if (provider === "ollama") {
         await ollama.chat(model, messages, options, onToken, signal, tools);
     } else if (provider === "llamacpp") {
-        const modelPath = path.join(getLlamaCppModelsDir(), model);
+        // Same containment rule as the rocm branch below: the model ref is a
+        // renderer-supplied relative path (may include subfolders), and
+        // path.join would happily walk ".." segments out of the models dir.
+        const root = path.resolve(getLlamaCppModelsDir());
+        const modelPath = path.resolve(root, model);
+        if (modelPath === root || !modelPath.startsWith(root + path.sep)) {
+            throw new Error(`Model file "${model}" is outside the models directory.`);
+        }
         await llamacpp.chat(modelPath, messages, options, onToken, signal, tools);
     } else if (provider === "mlx" || provider === "rocm" || provider === "vllm") {
         const settings = settingsStore.getSettings();
@@ -195,7 +220,12 @@ async function dispatchChat(
         if (provider === "rocm") {
             const root = path.resolve(getLlamaCppModelsDir());
             const resolved = path.resolve(root, model);
-            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+            // Was `resolved !== root && !startsWith(...)` (AND) — that only
+            // threw when BOTH conditions held, so a ref resolving to exactly
+            // the models dir itself (e.g. "rocm:.") satisfied neither and
+            // slipped through, handing the whole directory to llama-server
+            // -m as if it were a single model file.
+            if (resolved === root || !resolved.startsWith(root + path.sep)) {
                 throw new Error(`Model file "${model}" is outside the models directory.`);
             }
             serverModel = resolved;

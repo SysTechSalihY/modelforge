@@ -136,7 +136,14 @@ export async function getRuntimeStatuses(config: LocalBackendConfig): Promise<Lo
         (["rocm", "mlx", "vllm"] as const).map(async (backend) => {
             const probe = buildRuntimeProbe(backend, config);
             const running = servers.get(backend);
-            const installed = probe.compatible && (running ? !running.exited : await commandSucceeds(probe.command, probe.args));
+            // A live, non-exited process proves the runtime is installed
+            // without needing to probe. Anything else — no entry, or a
+            // stale one left behind after the process crashed — has to
+            // fall through to an actual probe; treating "exited" the same
+            // as "confirmed not installed" (the previous `running ? ... :`
+            // shortcut did, since !running.exited is false either way)
+            // reported a crashed-but-installed runtime as absent.
+            const installed = probe.compatible && (running && !running.exited ? true : await commandSucceeds(probe.command, probe.args));
             return {
                 backend,
                 compatible: probe.compatible,
